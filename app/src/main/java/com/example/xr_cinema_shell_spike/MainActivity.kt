@@ -49,7 +49,7 @@ class MainActivity : ComponentActivity() {
     
     // --- QA MODE TOGGLE ---
     private enum class Mode { STRICT, DEBUG_OVERRIDE }
-    private val QA_MODE = Mode.DEBUG_OVERRIDE // Select mode here
+    private var qaMode by mutableStateOf(Mode.DEBUG_OVERRIDE)
     // ----------------------
 
     private var cinemaManager: CinemaManager? = null
@@ -59,33 +59,37 @@ class MainActivity : ComponentActivity() {
         val caps = session.scene.spatialCapabilities
         val hasEmbed = caps.hasCapability(SpatialCapabilities.SPATIAL_CAPABILITY_EMBED_ACTIVITY)
         
-        Log.i(TAG, "LOUD: --- RUN CINEMA LOGIC (Mode: $QA_MODE, Manual: $isManual) ---")
+        Log.i(TAG, "LOUD: --- RUN CINEMA LOGIC (Mode: $qaMode, Manual: $isManual) ---")
         Log.i(TAG, "LOUD: Reported Capabilities: $caps")
 
-        val shouldProceed = when (QA_MODE) {
+        if (cinemaManager == null) {
+            cinemaManager = CinemaManager(session)
+        }
+        
+        // Reset diagnostic state for every run
+        cinemaManager?.reset()
+
+        val shouldProceed = when (qaMode) {
             Mode.STRICT -> hasEmbed
             Mode.DEBUG_OVERRIDE -> true
         }
 
         if (!shouldProceed) {
-            Log.i(TAG, "LOUD: $QA_MODE mode - aborting setup. Requirements not met (Embed Activity Capability: $hasEmbed).")
+            Log.i(TAG, "LOUD: $qaMode mode - aborting setup. Requirements not met (Embed Activity Capability: $hasEmbed).")
             return
         }
 
         val reason = when {
             hasEmbed -> "CAPABILITY FOUND (STRICT)"
-            QA_MODE == Mode.DEBUG_OVERRIDE -> "DEBUG_OVERRIDE ACTIVE"
+            qaMode == Mode.DEBUG_OVERRIDE -> "DEBUG_OVERRIDE ACTIVE"
             else -> "UNKNOWN"
         }
         
         Log.i(TAG, "LOUD: $reason - Proceeding with setup.")
-        
-        if (cinemaManager == null) {
-            cinemaManager = CinemaManager(session)
+        when (qaMode) {
+            Mode.STRICT -> cinemaManager?.setupActivityPanel(this)
+            Mode.DEBUG_OVERRIDE -> cinemaManager?.setupPlainPanelProbe(this)
         }
-        
-        cinemaManager?.setupCinema(this)
-        cinemaManager?.setPassthroughOpacity(0.0f)
     }
 
     @SuppressLint("RestrictedApi")
@@ -160,7 +164,7 @@ class MainActivity : ComponentActivity() {
 
                             // --- DISCREPANCY WARNING BANNER ---
                             val reportedEmbed = isSpatialUiEnabled // Corrected: Use value from LocalSpatialCapabilities
-                            val actualPanel = cinemaManager?.isPanelCreated ?: false
+                            val actualPanel = cinemaManager?.panelCreationSucceeded ?: false
                             
                             if (actualPanel && !reportedEmbed) {
                                 Box(
@@ -198,22 +202,27 @@ class MainActivity : ComponentActivity() {
                                     .padding(16.dp)
                             ) {
                                 Column {
-                                    Text("QA MODE: $QA_MODE", color = Color.White)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("QA MODE: ", color = Color.White)
+                                        Button(onClick = {
+                                            qaMode = if (qaMode == Mode.STRICT) Mode.DEBUG_OVERRIDE else Mode.STRICT
+                                            Log.i(TAG, "LOUD: QA Mode toggled to: $qaMode")
+                                            session?.let { runCinemaLogic(it, isManual = true) }
+                                        }) {
+                                            Text(qaMode.name)
+                                        }
+                                    }
                                     Text("Full Space: $isFullSpace", color = if (isFullSpace) Color.Green else Color.Red)
                                     
-                                    // Reported Capabilities summary
-                                    Text("Caps: UI=$isSpatialUiEnabled, Env=$isAppEnvironmentEnabled, Pass=$isPassthroughControlEnabled, Audio=$isSpatialAudioEnabled", 
-                                        style = MaterialTheme.typography.bodySmall, color = Color.White)
+                                    val cm = cinemaManager
+                                    Text("Panel Attempted: ${cm?.panelCreationAttempted}", color = Color.White)
+                                    Text("Panel Succeeded: ${cm?.panelCreationSucceeded}", color = if (cm?.panelCreationSucceeded == true) Color.Green else Color.White)
+                                    Text("Activity Launched: ${cm?.activityLaunchSucceeded}", color = if (cm?.activityLaunchSucceeded == true) Color.Green else Color.White)
                                     
-                                    val opacity = cinemaManager?.getPreferredPassthroughOpacity() ?: "N/A"
-                                    val envActive = cinemaManager?.isSpatialEnvironmentActive() ?: false
+                                    val discrepancy = (cm?.panelCreationSucceeded == true) && !isSpatialUiEnabled
+                                    Text("Discrepancy: $discrepancy", color = if (discrepancy) Color.Red else Color.White)
                                     
-                                    Text("Pref Passthrough Opacity: $opacity", color = Color.White)
-                                    Text("Pref Spatial Env Active: $envActive", color = Color.White)
-                                    Text("Panel Created: ${cinemaManager?.isPanelCreated ?: "false"}", color = Color.White)
-                                    Text("Test Activity Launched: ${cinemaManager?.isActivityLaunched ?: "false"}", color = Color.White)
-                                    
-                                    Log.i(TAG, "LOUD: UI Log - Mode: $QA_MODE, FullSpace: $isFullSpace, Opacity: $opacity, EnvActive: $envActive, Panel: ${cinemaManager?.isPanelCreated}, Launched: ${cinemaManager?.isActivityLaunched}")
+                                    Log.i(TAG, "LOUD: UI Log - Mode: $qaMode, Attempted: ${cm?.panelCreationAttempted}, Success: ${cm?.panelCreationSucceeded}, Launched: ${cm?.activityLaunchSucceeded}")
                                 }
                             }
 

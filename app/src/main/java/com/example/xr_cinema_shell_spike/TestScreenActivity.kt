@@ -14,6 +14,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.example.xr_cinema_shell_spike.ui.theme.XrcinemashellspikeTheme
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import java.util.Date
+
 class TestScreenActivity : ComponentActivity() {
     private val TAG = "XR_CINEMA_SPIKE_TEST"
 
@@ -22,17 +33,43 @@ class TestScreenActivity : ComponentActivity() {
         Log.i(TAG, "LOUD: TestScreenActivity onCreate")
         setContent {
             XrcinemashellspikeTheme {
+                var ticks by remember { mutableStateOf(0) }
+                LaunchedEffect(Unit) {
+                    while(true) {
+                        delay(1000)
+                        ticks++
+                    }
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black),
+                        .background(Color.Yellow) // GIANT YELLOW BACKGROUND
+                        .border(20.dp, Color.Red), // RED BORDER
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "INTERNAL TEST SCREEN",
-                        style = MaterialTheme.typography.displayLarge,
-                        color = Color.White
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "XR TEST PANEL",
+                            style = MaterialTheme.typography.displayLarge,
+                            color = Color.Black
+                        )
+                        Text(
+                            text = "Status: ACTIVE & VISIBLE",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = Color.Red
+                        )
+                        Text(
+                            text = "Counter: $ticks",
+                            style = MaterialTheme.typography.headlineLarge,
+                            color = Color.Blue
+                        )
+                        Text(
+                            text = "Last Update: ${Date()}",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color.Black
+                        )
+                    }
                 }
             }
         }
