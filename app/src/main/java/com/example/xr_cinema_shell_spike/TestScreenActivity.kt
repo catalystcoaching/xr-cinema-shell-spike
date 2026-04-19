@@ -1,6 +1,7 @@
 package com.example.xr_cinema_shell_spike
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -14,8 +15,11 @@ import androidx.compose.ui.graphics.Color
 import com.example.xr_cinema_shell_spike.ui.theme.XrcinemashellspikeTheme
 
 class TestScreenActivity : ComponentActivity() {
+    private val TAG = "XR_CINEMA_SPIKE_TEST"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.i(TAG, "LOUD: TestScreenActivity onCreate")
         setContent {
             XrcinemashellspikeTheme {
                 Box(
@@ -32,5 +36,10 @@ class TestScreenActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.i(TAG, "LOUD: TestScreenActivity onResume")
     }
 }
