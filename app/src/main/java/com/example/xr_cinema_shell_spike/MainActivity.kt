@@ -49,8 +49,8 @@ class MainActivity : ComponentActivity() {
     private val TAG = "XR_CINEMA_SPIKE"
     
     // --- QA MODE TOGGLE ---
-    private enum class Mode { STRICT, SOFT_STRICT, DEBUG_OVERRIDE }
-    private var QA_MODE = Mode.SOFT_STRICT
+    private enum class Mode { STRICT, DEBUG_OVERRIDE }
+    private var QA_MODE = Mode.DEBUG_OVERRIDE
     // ----------------------
 
     private var cinemaManager: CinemaManager? = null
@@ -59,25 +59,22 @@ class MainActivity : ComponentActivity() {
     private fun runCinemaLogic(session: Session, isManual: Boolean = false) {
         val caps = session.scene.spatialCapabilities
         val hasEmbed = caps.hasCapability(SpatialCapabilities.SPATIAL_CAPABILITY_EMBED_ACTIVITY)
-        val hasUi = caps.hasCapability(SpatialCapabilities.SPATIAL_CAPABILITY_UI)
         
         Log.i(TAG, "LOUD: --- RUN CINEMA LOGIC (Mode: $QA_MODE, Manual: $isManual) ---")
         Log.i(TAG, "LOUD: Reported Capabilities: $caps")
 
         val shouldProceed = when (QA_MODE) {
             Mode.STRICT -> hasEmbed
-            Mode.SOFT_STRICT -> hasEmbed || hasUi
             Mode.DEBUG_OVERRIDE -> true
         }
 
         if (!shouldProceed) {
-            Log.i(TAG, "LOUD: $QA_MODE mode - aborting setup. Requirements not met.")
+            Log.i(TAG, "LOUD: $QA_MODE mode - aborting setup. Requirements not met (Embed Activity Capability: $hasEmbed).")
             return
         }
 
         val reason = when {
-            hasEmbed -> "CAPABILITY FOUND"
-            QA_MODE == Mode.SOFT_STRICT && hasUi -> "SOFT_STRICT FALLBACK (UI enabled)"
+            hasEmbed -> "CAPABILITY FOUND (STRICT)"
             QA_MODE == Mode.DEBUG_OVERRIDE -> "DEBUG_OVERRIDE ACTIVE"
             else -> "UNKNOWN"
         }
@@ -124,12 +121,15 @@ class MainActivity : ComponentActivity() {
                 val isAppEnvironmentEnabled = capabilities.isAppEnvironmentEnabled
                 val isPassthroughControlEnabled = capabilities.isPassthroughControlEnabled
                 val isSpatialAudioEnabled = capabilities.isSpatialAudioEnabled
+                
+                // Track Full Space status manually for UI
+                var isFullSpace by remember { mutableStateOf(false) }
 
                 LaunchedEffect(session) {
                     if (session != null) {
                         Log.i(TAG, "LOUD: Registering Spatial Capabilities Listener...")
                         session.scene.addSpatialCapabilitiesChangedListener(Consumer { caps ->
-                            Log.i(TAG, "LOUD: Capabilities Changed: $caps")
+                            Log.i(TAG, "LOUD: Reported Capabilities changed: $caps")
                             if (caps.hasCapability(SpatialCapabilities.SPATIAL_CAPABILITY_EMBED_ACTIVITY)) {
                                 Log.i(TAG, "LOUD: EMBED_ACTIVITY capability detected!")
                                 runCinemaLogic(session)
@@ -138,6 +138,8 @@ class MainActivity : ComponentActivity() {
 
                         Log.i(TAG, "LOUD: Requesting Full Space Mode...")
                         spatialConfig.requestFullSpaceMode()
+                        isFullSpace = true
+                        Log.i(TAG, "LOUD: Full Space entered (requested/assumed)")
                         
                         // Check initial state
                         runCinemaLogic(session)
@@ -198,16 +200,25 @@ class MainActivity : ComponentActivity() {
                             ) {
                                 Column {
                                     Text("QA MODE: $QA_MODE", color = Color.White)
-                                    val reportedEmbedStr = if (reportedEmbed) "YES" else "NO"
-                                    Text("Reported Embed Cap: $reportedEmbedStr", color = if (reportedEmbed) Color.Green else Color.Red)
+                                    Text("Full Space: $isFullSpace", color = if (isFullSpace) Color.Green else Color.Red)
+                                    
+                                    val actualReportedEmbed = isSpatialUiEnabled
+                                    Text("Reported Embed Cap: $actualReportedEmbed", color = if (actualReportedEmbed) Color.Green else Color.Red)
+                                    
                                     Text("isSpatialUiEnabled: $isSpatialUiEnabled", color = if (isSpatialUiEnabled) Color.Green else Color.Red)
                                     Text("isAppEnvEnabled: $isAppEnvironmentEnabled", color = if (isAppEnvironmentEnabled) Color.Green else Color.Red)
                                     Text("isPassthroughEnabled: $isPassthroughControlEnabled", color = if (isPassthroughControlEnabled) Color.Green else Color.Red)
                                     Text("isSpatialAudioEnabled: $isSpatialAudioEnabled", color = if (isSpatialAudioEnabled) Color.Green else Color.Red)
-                                    Text("Current Opacity Pref: ${cinemaManager?.getPreferredPassthroughOpacity() ?: "N/A"}", color = Color.White)
-                                    Text("Spatial Env Active: ${cinemaManager?.isSpatialEnvironmentActive() ?: "N/A"}", color = Color.White)
+                                    
+                                    val opacity = cinemaManager?.getPreferredPassthroughOpacity() ?: "N/A"
+                                    val envActive = cinemaManager?.isSpatialEnvironmentActive() ?: false
+                                    
+                                    Text("Passthrough Opacity: $opacity", color = Color.White)
+                                    Text("Spatial Env Active: $envActive", color = Color.White)
                                     Text("Panel Created: ${cinemaManager?.isPanelCreated ?: "false"}", color = Color.White)
                                     Text("Test Activity Launched: ${cinemaManager?.isActivityLaunched ?: "false"}", color = Color.White)
+                                    
+                                    Log.i(TAG, "LOUD: UI STATUS - Mode: $QA_MODE, FullSpace: $isFullSpace, EmbedCap: $actualReportedEmbed, Opacity: $opacity, EnvActive: $envActive, Panel: ${cinemaManager?.isPanelCreated}, Launched: ${cinemaManager?.isActivityLaunched}")
                                 }
                             }
 
