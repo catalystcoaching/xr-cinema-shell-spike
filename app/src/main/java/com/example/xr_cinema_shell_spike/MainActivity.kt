@@ -41,7 +41,6 @@ import androidx.xr.runtime.SessionCreateSuccess
 import androidx.xr.scenecore.SpatialCapabilities
 import androidx.xr.scenecore.scene
 import com.example.xr_cinema_shell_spike.ui.theme.XrcinemashellspikeTheme
-import kotlinx.coroutines.delay
 import java.util.function.Consumer
 
 class MainActivity : ComponentActivity() {
@@ -50,7 +49,7 @@ class MainActivity : ComponentActivity() {
     
     // --- QA MODE TOGGLE ---
     private enum class Mode { STRICT, DEBUG_OVERRIDE }
-    private val QA_MODE = Mode.STRICT
+    private val QA_MODE = Mode.DEBUG_OVERRIDE // Select mode here
     // ----------------------
 
     private var cinemaManager: CinemaManager? = null
@@ -202,23 +201,19 @@ class MainActivity : ComponentActivity() {
                                     Text("QA MODE: $QA_MODE", color = Color.White)
                                     Text("Full Space: $isFullSpace", color = if (isFullSpace) Color.Green else Color.Red)
                                     
-                                    val actualReportedEmbed = isSpatialUiEnabled
-                                    Text("Reported Embed Cap: $actualReportedEmbed", color = if (actualReportedEmbed) Color.Green else Color.Red)
-                                    
-                                    Text("isSpatialUiEnabled: $isSpatialUiEnabled", color = if (isSpatialUiEnabled) Color.Green else Color.Red)
-                                    Text("isAppEnvEnabled: $isAppEnvironmentEnabled", color = if (isAppEnvironmentEnabled) Color.Green else Color.Red)
-                                    Text("isPassthroughEnabled: $isPassthroughControlEnabled", color = if (isPassthroughControlEnabled) Color.Green else Color.Red)
-                                    Text("isSpatialAudioEnabled: $isSpatialAudioEnabled", color = if (isSpatialAudioEnabled) Color.Green else Color.Red)
+                                    // Reported Capabilities summary
+                                    Text("Caps: UI=$isSpatialUiEnabled, Env=$isAppEnvironmentEnabled, Pass=$isPassthroughControlEnabled, Audio=$isSpatialAudioEnabled", 
+                                        style = MaterialTheme.typography.bodySmall, color = Color.White)
                                     
                                     val opacity = cinemaManager?.getPreferredPassthroughOpacity() ?: "N/A"
                                     val envActive = cinemaManager?.isSpatialEnvironmentActive() ?: false
                                     
-                                    Text("Passthrough Opacity: $opacity", color = Color.White)
-                                    Text("Spatial Env Active: $envActive", color = Color.White)
+                                    Text("Pref Passthrough Opacity: $opacity", color = Color.White)
+                                    Text("Pref Spatial Env Active: $envActive", color = Color.White)
                                     Text("Panel Created: ${cinemaManager?.isPanelCreated ?: "false"}", color = Color.White)
                                     Text("Test Activity Launched: ${cinemaManager?.isActivityLaunched ?: "false"}", color = Color.White)
                                     
-                                    Log.i(TAG, "LOUD: UI STATUS - Mode: $QA_MODE, FullSpace: $isFullSpace, EmbedCap: $actualReportedEmbed, Opacity: $opacity, EnvActive: $envActive, Panel: ${cinemaManager?.isPanelCreated}, Launched: ${cinemaManager?.isActivityLaunched}")
+                                    Log.i(TAG, "LOUD: UI Log - Mode: $QA_MODE, FullSpace: $isFullSpace, Opacity: $opacity, EnvActive: $envActive, Panel: ${cinemaManager?.isPanelCreated}, Launched: ${cinemaManager?.isActivityLaunched}")
                                 }
                             }
 
