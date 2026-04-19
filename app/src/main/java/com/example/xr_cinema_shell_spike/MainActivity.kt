@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
     
     // --- QA MODE TOGGLE ---
     private enum class Mode { STRICT, DEBUG_OVERRIDE }
-    private var QA_MODE = Mode.DEBUG_OVERRIDE
+    private val QA_MODE = Mode.STRICT
     // ----------------------
 
     private var cinemaManager: CinemaManager? = null

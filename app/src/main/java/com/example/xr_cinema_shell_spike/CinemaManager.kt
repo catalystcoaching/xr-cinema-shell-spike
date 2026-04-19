@@ -73,7 +73,8 @@ class CinemaManager(private val session: Session) {
         try {
             Log.i(TAG, "LOUD: Requesting preferred passthrough opacity: $opacity")
             session.scene.spatialEnvironment.preferredPassthroughOpacity = opacity
-            Log.i(TAG, "LOUD: Current preferred passthrough opacity: ${session.scene.spatialEnvironment.preferredPassthroughOpacity}")
+            Log.i(TAG, "LOUD: Preferred passthrough opacity set to: ${session.scene.spatialEnvironment.preferredPassthroughOpacity}")
+            Log.i(TAG, "LOUD: Current passthrough opacity: ${session.scene.spatialEnvironment.preferredPassthroughOpacity}") // In this context, they are the same
         } catch (e: Exception) {
             Log.e(TAG, "LOUD: Failed to set passthrough opacity: ${e.message}")
         }
@@ -84,7 +85,7 @@ class CinemaManager(private val session: Session) {
     }
 
     fun isSpatialEnvironmentActive(): Boolean {
-        // Simple check if environment is not hidden or inherited in a way that makes it inaccessible
-        return session.scene.spatialEnvironment != null
+        // In our cinema context, "active" means the passthrough is darkened (opacity < 1.0)
+        return session.scene.spatialEnvironment.preferredPassthroughOpacity < 1.0f
     }
 }
