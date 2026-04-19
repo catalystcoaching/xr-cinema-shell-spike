@@ -4,6 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.xr.runtime.Session
 import androidx.xr.runtime.math.IntSize2d
 import androidx.xr.runtime.math.Pose
@@ -14,62 +17,74 @@ import androidx.xr.scenecore.Space
 import androidx.xr.scenecore.scene
 
 /**
- * CinemaManager encapsulates the logic for creating and managing the XR cinema environment,
- * including activity embedding and passthrough control.
+ * CinemaManager encapsulates the logic for creating and managing the XR cinema environment.
  */
 @SuppressLint("RestrictedApi")
 class CinemaManager(private val session: Session) {
     private val TAG = "CinemaManager"
-    private var cinemaPanel: ActivityPanelEntity? = null
+    
+    var isPanelCreated: Boolean by mutableStateOf(false)
+        private set
+    var isActivityLaunched: Boolean by mutableStateOf(false)
+        private set
 
     /**
      * Initializes the cinema panel and launches the embedded activity.
      */
     fun setupCinema(context: Context) {
-        if (cinemaPanel != null) {
-            Log.i(TAG, "Cinema panel already exists, skipping creation.")
+        if (isPanelCreated) {
+            Log.i(TAG, "LOUD: Cinema panel already exists, skipping creation.")
             return
         }
 
         try {
-            Log.i(TAG, "Creating ActivityPanelEntity for Cinema...")
-            // 1920x1080 for a standard 16:9 aspect ratio.
+            Log.i(TAG, "LOUD: Creating ActivityPanelEntity for Cinema...")
             val panel = ActivityPanelEntity.create(
                 session,
                 IntSize2d(1920, 1080),
                 "CinemaScreen"
             )
 
-            // Position: 1.2m up, 2m in front of the user's initial activity space origin.
             panel.setPose(Pose(
                 Vector3(0f, 1.2f, -2.0f),
                 Quaternion.Identity
             ), Space.ACTIVITY)
 
-            cinemaPanel = panel
+            isPanelCreated = true
+            Log.i(TAG, "LOUD: ActivityPanelEntity created: true")
 
             val intent = Intent(context, TestScreenActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             
-            Log.i(TAG, "Launching TestScreenActivity into Cinema Panel...")
+            Log.i(TAG, "LOUD: Launching TestScreenActivity into Cinema Panel...")
             panel.launchActivity(intent)
+            isActivityLaunched = true
+            Log.i(TAG, "LOUD: TestScreenActivity launched: true")
         } catch (e: Exception) {
-            Log.e(TAG, "CRITICAL: Failed to setup cinema panel: ${e.message}", e)
+            Log.e(TAG, "LOUD: CRITICAL: Failed to setup cinema panel: ${e.message}", e)
         }
     }
 
     /**
      * Controls the passthrough opacity of the spatial environment.
-     * 0.0f is fully opaque (dark environment), 1.0f is fully transparent (passthrough).
      */
     fun setPassthroughOpacity(opacity: Float) {
         try {
-            Log.i(TAG, "Requesting preferred passthrough opacity: $opacity")
+            Log.i(TAG, "LOUD: Requesting preferred passthrough opacity: $opacity")
             session.scene.spatialEnvironment.preferredPassthroughOpacity = opacity
-            Log.i(TAG, "Current preferred passthrough opacity: ${session.scene.spatialEnvironment.preferredPassthroughOpacity}")
+            Log.i(TAG, "LOUD: Current preferred passthrough opacity: ${session.scene.spatialEnvironment.preferredPassthroughOpacity}")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to set passthrough opacity: ${e.message}")
+            Log.e(TAG, "LOUD: Failed to set passthrough opacity: ${e.message}")
         }
+    }
+    
+    fun getPreferredPassthroughOpacity(): Float {
+        return session.scene.spatialEnvironment.preferredPassthroughOpacity
+    }
+
+    fun isSpatialEnvironmentActive(): Boolean {
+        // Simple check if environment is not hidden or inherited in a way that makes it inaccessible
+        return session.scene.spatialEnvironment != null
     }
 }

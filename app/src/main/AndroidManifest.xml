@@ -34,14 +34,16 @@
             android:theme="@style/Theme.Xrcinemashellspike">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.XR" />
+                <category android:name="com.google.intent.category.DAYDREAM" />
             </intent-filter>
         </activity>
 
         <activity
             android:name=".TestScreenActivity"
             android:exported="false"
+            android:allowEmbedded="true"
             android:theme="@style/Theme.Xrcinemashellspike" />
     </application>
 

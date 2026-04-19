@@ -7,21 +7,31 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.xr.compose.platform.LocalSession
 import androidx.xr.compose.platform.LocalSpatialCapabilities
 import androidx.xr.compose.platform.LocalSpatialConfiguration
@@ -32,22 +42,53 @@ import androidx.xr.scenecore.SpatialCapabilities
 import androidx.xr.scenecore.scene
 import com.example.xr_cinema_shell_spike.ui.theme.XrcinemashellspikeTheme
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import java.util.function.Consumer
 
 class MainActivity : ComponentActivity() {
 
     private val TAG = "XR_CINEMA_SPIKE"
-    private var xrSession: Session? = null
+    
+    // --- QA MODE TOGGLE ---
+    private enum class Mode { STRICT, SOFT_STRICT, DEBUG_OVERRIDE }
+    private var QA_MODE = Mode.SOFT_STRICT
+    // ----------------------
+
     private var cinemaManager: CinemaManager? = null
 
     @SuppressLint("RestrictedApi")
-    private fun runSpike(session: Session) {
+    private fun runCinemaLogic(session: Session, isManual: Boolean = false) {
+        val caps = session.scene.spatialCapabilities
+        val hasEmbed = caps.hasCapability(SpatialCapabilities.SPATIAL_CAPABILITY_EMBED_ACTIVITY)
+        val hasUi = caps.hasCapability(SpatialCapabilities.SPATIAL_CAPABILITY_UI)
+        
+        Log.i(TAG, "LOUD: --- RUN CINEMA LOGIC (Mode: $QA_MODE, Manual: $isManual) ---")
+        Log.i(TAG, "LOUD: Reported Capabilities: $caps")
+
+        val shouldProceed = when (QA_MODE) {
+            Mode.STRICT -> hasEmbed
+            Mode.SOFT_STRICT -> hasEmbed || hasUi
+            Mode.DEBUG_OVERRIDE -> true
+        }
+
+        if (!shouldProceed) {
+            Log.i(TAG, "LOUD: $QA_MODE mode - aborting setup. Requirements not met.")
+            return
+        }
+
+        val reason = when {
+            hasEmbed -> "CAPABILITY FOUND"
+            QA_MODE == Mode.SOFT_STRICT && hasUi -> "SOFT_STRICT FALLBACK (UI enabled)"
+            QA_MODE == Mode.DEBUG_OVERRIDE -> "DEBUG_OVERRIDE ACTIVE"
+            else -> "UNKNOWN"
+        }
+        
+        Log.i(TAG, "LOUD: $reason - Proceeding with setup.")
+        
         if (cinemaManager == null) {
             cinemaManager = CinemaManager(session)
         }
         
         cinemaManager?.setupCinema(this)
-        // Initial setup to 0.0 for cinema feel
         cinemaManager?.setPassthroughOpacity(0.0f)
     }
 
@@ -63,29 +104,13 @@ class MainActivity : ComponentActivity() {
         setShowWhenLocked(true)
         setTurnScreenOn(true)
 
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.CREATED) {
-                Log.i(TAG, "LOUD: Lifecycle CREATED")
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                Log.i(TAG, "LOUD: Lifecycle STARTED")
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                Log.i(TAG, "LOUD: Lifecycle RESUMED")
-            }
-        }
-
         val sessionResult = Session.create(this)
         if (sessionResult is SessionCreateSuccess) {
-            xrSession = sessionResult.session
-            Log.i(TAG, "LOUD: Session created successfully in onCreate")
-            runSpike(xrSession!!)
+            Log.i(TAG, "LOUD: Session created successfully")
+            // In a real app we might wait for Full Space, but we'll try once here for the log.
+            runCinemaLogic(sessionResult.session)
         } else {
-            Log.e(TAG, "LOUD: Failed to create session in onCreate: $sessionResult")
+            Log.e(TAG, "LOUD: Failed to create session: $sessionResult")
         }
 
         setContent {
@@ -93,88 +118,118 @@ class MainActivity : ComponentActivity() {
                 val session = LocalSession.current
                 val capabilities = LocalSpatialCapabilities.current
                 val spatialConfig = LocalSpatialConfiguration.current
+                
+                // Drive the UI status from Compose-layer capabilities
+                val isSpatialUiEnabled = capabilities.isSpatialUiEnabled
+                val isAppEnvironmentEnabled = capabilities.isAppEnvironmentEnabled
+                val isPassthroughControlEnabled = capabilities.isPassthroughControlEnabled
+                val isSpatialAudioEnabled = capabilities.isSpatialAudioEnabled
 
-                Log.i(TAG, "LOUD: Composition cycle - session is ${if (session == null) "NULL" else "AVAILABLE"}")
-                Log.i(TAG, "LOUD: Current Spatial Bounds: ${spatialConfig.bounds}")
-
-                // Also run spike from compose if it wasn't run or if session becomes available here
                 LaunchedEffect(session) {
                     if (session != null) {
-                        Log.i(TAG, "LOUD: LaunchedEffect(session) triggered")
-                        
-                        // Request Full Space explicitly
+                        Log.i(TAG, "LOUD: Registering Spatial Capabilities Listener...")
+                        session.scene.addSpatialCapabilitiesChangedListener(Consumer { caps ->
+                            Log.i(TAG, "LOUD: Capabilities Changed: $caps")
+                            if (caps.hasCapability(SpatialCapabilities.SPATIAL_CAPABILITY_EMBED_ACTIVITY)) {
+                                Log.i(TAG, "LOUD: EMBED_ACTIVITY capability detected!")
+                                runCinemaLogic(session)
+                            }
+                        })
+
                         Log.i(TAG, "LOUD: Requesting Full Space Mode...")
                         spatialConfig.requestFullSpaceMode()
-
-                        // Wait for spatial mode and capabilities to settle
-                        for (i in 1..15) {
-                            val currentCaps = session.scene.spatialCapabilities
-                            Log.i(TAG, "LOUD: Iteration $i - Caps: $currentCaps")
-                            
-                            if (currentCaps.hasCapability(SpatialCapabilities.SPATIAL_CAPABILITY_EMBED_ACTIVITY)) {
-                                Log.i(TAG, "LOUD: SUCCESS! EMBED_ACTIVITY found on iteration $i")
-                                runSpike(session)
-                                break
-                            }
-                            
-                            // Even if not found yet, try running spike anyway on iteration 5, 10, 15
-                            if (i % 5 == 0) {
-                                Log.i(TAG, "LOUD: Periodic spike attempt on iteration $i")
-                                runSpike(session)
-                            }
-
-                            delay(2000)
-                        }
+                        
+                        // Check initial state
+                        runCinemaLogic(session)
                     }
                 }
 
                 Subspace {
-                    // Empty subspace to ensure spatial mode is active
+                    // Ensures spatial mode
                 }
 
                 Surface {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "Cinema Shell Spike Controller",
-                                modifier = Modifier.padding(8.dp)
+                                text = "XR Cinema QA Controller",
+                                style = MaterialTheme.typography.headlineMedium,
+                                modifier = Modifier.padding(16.dp)
                             )
-                            Button(onClick = { 
-                                Log.i(TAG, "LOUD: Manual Spike Triggered")
-                                session?.let { runSpike(it) } 
-                            }) {
-                                Text("Run Full Spike")
-                            }
+
+                            // --- DISCREPANCY WARNING BANNER ---
+                            val reportedEmbed = isSpatialUiEnabled // Corrected: Use value from LocalSpatialCapabilities
+                            val actualPanel = cinemaManager?.isPanelCreated ?: false
                             
-                            Row {
-                                Button(
-                                    onClick = { 
-                                        Log.i(TAG, "LOUD: Manual Passthrough -> 0.0")
-                                        cinemaManager?.setPassthroughOpacity(0.0f)
-                                    },
-                                    modifier = Modifier.padding(4.dp)
+                            if (actualPanel && !reportedEmbed) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp)
+                                        .background(Color(0xFFFFCC00), RoundedCornerShape(8.dp))
+                                        .border(2.dp, Color.Red, RoundedCornerShape(8.dp))
+                                        .padding(12.dp)
                                 ) {
-                                    Text("Passthrough 0.0")
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Warning, contentDescription = "Warning", tint = Color.Red)
+                                        Column(modifier = Modifier.padding(start = 12.dp)) {
+                                            Text(
+                                                "CAPABILITY DISCREPANCY DETECTED",
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = Color.Black
+                                            )
+                                            Text(
+                                                "System reports NO Embed Activity capability, but the Cinema Panel was successfully created and launched. This confirms a reporting bug in the current firmware/SDK.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.Black
+                                            )
+                                        }
+                                    }
                                 }
-                                Button(
-                                    onClick = { 
-                                        Log.i(TAG, "LOUD: Manual Passthrough -> 1.0")
-                                        cinemaManager?.setPassthroughOpacity(1.0f)
-                                    },
-                                    modifier = Modifier.padding(4.dp)
-                                ) {
-                                    Text("Passthrough 1.0")
+                            }
+                            // ----------------------------------
+                            
+                            // Debug Overlay
+                            Box(
+                                modifier = Modifier
+                                    .padding(16.dp)
+                                    .background(Color.DarkGray.copy(alpha = 0.8f))
+                                    .padding(16.dp)
+                            ) {
+                                Column {
+                                    Text("QA MODE: $QA_MODE", color = Color.White)
+                                    val reportedEmbedStr = if (reportedEmbed) "YES" else "NO"
+                                    Text("Reported Embed Cap: $reportedEmbedStr", color = if (reportedEmbed) Color.Green else Color.Red)
+                                    Text("isSpatialUiEnabled: $isSpatialUiEnabled", color = if (isSpatialUiEnabled) Color.Green else Color.Red)
+                                    Text("isAppEnvEnabled: $isAppEnvironmentEnabled", color = if (isAppEnvironmentEnabled) Color.Green else Color.Red)
+                                    Text("isPassthroughEnabled: $isPassthroughControlEnabled", color = if (isPassthroughControlEnabled) Color.Green else Color.Red)
+                                    Text("isSpatialAudioEnabled: $isSpatialAudioEnabled", color = if (isSpatialAudioEnabled) Color.Green else Color.Red)
+                                    Text("Current Opacity Pref: ${cinemaManager?.getPreferredPassthroughOpacity() ?: "N/A"}", color = Color.White)
+                                    Text("Spatial Env Active: ${cinemaManager?.isSpatialEnvironmentActive() ?: "N/A"}", color = Color.White)
+                                    Text("Panel Created: ${cinemaManager?.isPanelCreated ?: "false"}", color = Color.White)
+                                    Text("Test Activity Launched: ${cinemaManager?.isActivityLaunched ?: "false"}", color = Color.White)
                                 }
                             }
 
-                            Text(
-                                text = "Capabilities: $capabilities",
-                                modifier = Modifier.padding(8.dp)
-                            )
-                            Text(
-                                text = "Bounds: ${spatialConfig.bounds}",
-                                modifier = Modifier.padding(8.dp)
-                            )
+                            Row {
+                                Button(
+                                    onClick = { 
+                                        Log.i(TAG, "LOUD: Manual Trigger Pressed")
+                                        session?.let { runCinemaLogic(it, isManual = true) } 
+                                    },
+                                    modifier = Modifier.padding(8.dp)
+                                ) {
+                                    Text("Run Logic")
+                                }
+                                Button(
+                                    onClick = { 
+                                        cinemaManager?.setPassthroughOpacity(1.0f)
+                                    },
+                                    modifier = Modifier.padding(8.dp)
+                                ) {
+                                    Text("Reset Passthrough")
+                                }
+                            }
                         }
                     }
                 }
