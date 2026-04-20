@@ -18,6 +18,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
+import android.widget.Button as AndroidButton
 import androidx.xr.runtime.math.FloatSize2d
 import androidx.xr.scenecore.ActivityPanelEntity
 import androidx.xr.scenecore.PanelEntity
@@ -43,8 +44,16 @@ class CinemaManager(private val session: Session) {
 
     private var activeActivityPanel: ActivityPanelEntity? = null
     private var activePlainPanel: PanelEntity? = null
+    private var activeControllerPanel: PanelEntity? = null
     private var probeUpdateHandler: Handler? = null
     private var probeRunnable: Runnable? = null
+    private var controllerUpdateHandler: Handler? = null
+    private var controllerRunnable: Runnable? = null
+
+    var qaMode: String = "DEBUG_OVERRIDE" // Local state for the spatial controller
+    
+    var lastErrorMessage: String by mutableStateOf("")
+        private set
 
     /**
      * Resets all diagnostic state and attempts to clean up existing panels.
@@ -55,6 +64,7 @@ class CinemaManager(private val session: Session) {
         panelCreationSucceeded = false
         activityLaunchAttempted = false
         activityLaunchSucceeded = false
+        lastErrorMessage = ""
         
         probeUpdateHandler?.removeCallbacksAndMessages(null)
         probeUpdateHandler = null
@@ -65,6 +75,104 @@ class CinemaManager(private val session: Session) {
         
         activePlainPanel?.dispose()
         activePlainPanel = null
+    }
+
+    /**
+     * Disposes of everything including the spatial controller.
+     */
+    fun fullCleanup() {
+        reset()
+        controllerUpdateHandler?.removeCallbacksAndMessages(null)
+        controllerUpdateHandler = null
+        activeControllerPanel?.dispose()
+        activeControllerPanel = null
+    }
+
+    /**
+     * Initializes a spatial controller panel (STARTUP CONTROLLER).
+     */
+    fun setupStartupControllerPanel(context: Context) {
+        Log.i(TAG, "LOUD: --- SETUP STARTUP CONTROLLER PANEL ---")
+        try {
+            activeControllerPanel?.dispose()
+
+            val titleView = TextView(context).apply {
+                text = "XR STARTUP CONTROLLER"
+                textSize = 30f
+                setTextColor(android.graphics.Color.WHITE)
+                gravity = Gravity.CENTER
+            }
+
+            val statusView = TextView(context).apply {
+                text = "Mode: $qaMode\nProbe: None"
+                textSize = 18f
+                setTextColor(android.graphics.Color.LTGRAY)
+                gravity = Gravity.CENTER
+                setPadding(0, 20, 0, 20)
+            }
+
+            val runButton = AndroidButton(context).apply {
+                text = "RUN PROBE"
+                setOnClickListener {
+                    Log.i(TAG, "LOUD: [Spatial UI] RUN PROBE pressed.")
+                    setupPlainPanelProbe(context)
+                }
+            }
+
+            val toggleButton = AndroidButton(context).apply {
+                text = "TOGGLE MODE"
+                setOnClickListener {
+                    qaMode = if (qaMode == "STRICT") "DEBUG_OVERRIDE" else "STRICT"
+                    Log.i(TAG, "LOUD: [Spatial UI] Mode toggled to: $qaMode")
+                }
+            }
+
+            val layout = ColumnLayout(context).apply {
+                setBackgroundColor(android.graphics.Color.BLUE)
+                setPadding(40, 40, 40, 40)
+                addView(titleView)
+                addView(statusView)
+                addView(runButton)
+                addView(toggleButton)
+            }
+
+            // Fixed Pose: slightly to the left, 1.2m high, 1.0m ahead
+            val controllerPose = Pose(Vector3(-0.6f, 1.2f, -1.0f), Quaternion.Identity)
+            
+            val panel = PanelEntity.create(
+                session,
+                layout,
+                FloatSize2d(0.8f, 0.6f),
+                "ControllerPanel",
+                controllerPose
+            )
+            
+            activeControllerPanel = panel
+            Log.i(TAG, "LOUD: Startup Controller Panel SUCCESS.")
+
+            controllerUpdateHandler = Handler(Looper.getMainLooper())
+            controllerRunnable = object : Runnable {
+                override fun run() {
+                    val probeStatus = if (activePlainPanel != null) "ACTIVE" else "None"
+                    statusView.text = "Mode: $qaMode\nProbe: $probeStatus"
+                    controllerUpdateHandler?.postDelayed(this, 500)
+                }
+            }
+            controllerUpdateHandler?.post(controllerRunnable!!)
+
+        } catch (e: Exception) {
+            Log.e(TAG, "LOUD: Startup Controller Panel FAILURE: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Helper layout for the spatial controller
+     */
+    private class ColumnLayout(context: Context) : android.widget.LinearLayout(context) {
+        init {
+            orientation = VERTICAL
+            gravity = Gravity.CENTER
+        }
     }
 
     /**
@@ -93,11 +201,23 @@ class CinemaManager(private val session: Session) {
 
     /**
      * Initializes a plain PanelEntity probe (DEBUG_OVERRIDE mode).
+     * USES A FIXED POSE TO AVOID HEAD-TRACKING DEPENDENCY.
      */
     fun setupPlainPanelProbe(context: Context) {
         Log.i(TAG, "LOUD: --- SETUP PLAIN PANEL PROBE (DEBUG_OVERRIDE) ---")
+        Log.i(TAG, "LOUD: [BYPASS] Head-tracking dependency removed. Using Fixed Pose.")
+        
+        // Dispose of any old probe first
+        activePlainPanel?.dispose()
+        activePlainPanel = null
+        probeUpdateHandler?.removeCallbacksAndMessages(null)
+
         panelCreationAttempted = true
         try {
+            // Fixed Pose: 1.5m ahead of origin, 1.2m high
+            val finalPose = Pose(Vector3(0f, 1.2f, -1.5f), Quaternion.Identity)
+            Log.i(TAG, "LOUD: Fixed Probe Pose used: $finalPose")
+
             val textView = TextView(context).apply {
                 text = "PLAIN PANEL PROBE\n(INITIALIZING)"
                 textSize = 50f
@@ -113,16 +233,21 @@ class CinemaManager(private val session: Session) {
                 addView(textView)
             }
 
+            val panelSize = FloatSize2d(1.5f, 1.0f)
             val panel = PanelEntity.create(
                 session,
                 container,
-                FloatSize2d(2.0f, 1.5f),
+                panelSize,
                 "ProbePanel",
-                Pose(Vector3(0f, 1.2f, -1.0f), Quaternion.Identity)
+                finalPose
             )
             
             activePlainPanel = panel
             panelCreationSucceeded = true
+            
+            Log.i(TAG, "LOUD: Plain Panel Probe SUCCESS.")
+            Log.i(TAG, "LOUD: Probe Pose: $finalPose")
+            Log.i(TAG, "LOUD: Probe Size: $panelSize")
 
             // Live update counter
             probeUpdateHandler = Handler(Looper.getMainLooper())
@@ -134,9 +259,8 @@ class CinemaManager(private val session: Session) {
                 }
             }
             probeUpdateHandler?.post(probeRunnable!!)
-
-            Log.i(TAG, "LOUD: Plain Panel Probe Created at 1.0m.")
         } catch (e: Exception) {
+            lastErrorMessage = e.message ?: "Unknown Error"
             Log.e(TAG, "LOUD: Plain Panel Probe FAILURE: ${e.message}", e)
         }
     }
