@@ -52,6 +52,10 @@ class CinemaManager(private val session: Session) {
 
     var qaMode: String = "DEBUG_OVERRIDE" // Local state for the spatial controller
     
+    // Probe height state
+    private val DEFAULT_PROBE_Y = 1.2f
+    private var currentProbeY = DEFAULT_PROBE_Y
+
     var lastErrorMessage: String by mutableStateOf("")
         private set
 
@@ -127,6 +131,33 @@ class CinemaManager(private val session: Session) {
                 }
             }
 
+            val downButton = AndroidButton(context).apply {
+                text = "PROBE DOWN (-0.2)"
+                setOnClickListener {
+                    currentProbeY -= 0.2f
+                    Log.i(TAG, "LOUD: PROBE DOWN pressed. New Y: $currentProbeY")
+                    setupPlainPanelProbe(context)
+                }
+            }
+
+            val upButton = AndroidButton(context).apply {
+                text = "PROBE UP (+0.2)"
+                setOnClickListener {
+                    currentProbeY += 0.2f
+                    Log.i(TAG, "LOUD: PROBE UP pressed. New Y: $currentProbeY")
+                    setupPlainPanelProbe(context)
+                }
+            }
+
+            val resetButton = AndroidButton(context).apply {
+                text = "RESET HEIGHT"
+                setOnClickListener {
+                    currentProbeY = DEFAULT_PROBE_Y
+                    Log.i(TAG, "LOUD: RESET PROBE HEIGHT pressed. Y: $currentProbeY")
+                    setupPlainPanelProbe(context)
+                }
+            }
+
             val layout = ColumnLayout(context).apply {
                 setBackgroundColor(android.graphics.Color.BLUE)
                 setPadding(40, 40, 40, 40)
@@ -134,6 +165,9 @@ class CinemaManager(private val session: Session) {
                 addView(statusView)
                 addView(runButton)
                 addView(toggleButton)
+                addView(downButton)
+                addView(upButton)
+                addView(resetButton)
             }
 
             // Fixed Pose: slightly to the left, 1.2m high, 1.0m ahead
@@ -154,7 +188,7 @@ class CinemaManager(private val session: Session) {
             controllerRunnable = object : Runnable {
                 override fun run() {
                     val probeStatus = if (activePlainPanel != null) "ACTIVE" else "None"
-                    statusView.text = "Mode: $qaMode\nProbe: $probeStatus"
+                    statusView.text = "Mode: $qaMode\nProbe: $probeStatus\nY: %.1f".format(currentProbeY)
                     controllerUpdateHandler?.postDelayed(this, 500)
                 }
             }
@@ -206,6 +240,7 @@ class CinemaManager(private val session: Session) {
     fun setupPlainPanelProbe(context: Context) {
         Log.i(TAG, "LOUD: --- SETUP PLAIN PANEL PROBE (DEBUG_OVERRIDE) ---")
         Log.i(TAG, "LOUD: [BYPASS] Head-tracking dependency removed. Using Fixed Pose.")
+        Log.i(TAG, "LOUD: Current Probe Y value used: $currentProbeY")
         
         // Dispose of any old probe first
         activePlainPanel?.dispose()
@@ -214,8 +249,8 @@ class CinemaManager(private val session: Session) {
 
         panelCreationAttempted = true
         try {
-            // Fixed Pose: 1.5m ahead of origin, 1.2m high
-            val finalPose = Pose(Vector3(0f, 1.2f, -1.5f), Quaternion.Identity)
+            // Fixed Pose: 1.5m ahead of origin, currentProbeY high
+            val finalPose = Pose(Vector3(0f, currentProbeY, -1.5f), Quaternion.Identity)
             Log.i(TAG, "LOUD: Fixed Probe Pose used: $finalPose")
 
             val textView = TextView(context).apply {
