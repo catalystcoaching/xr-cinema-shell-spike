@@ -54,7 +54,7 @@ class CinemaManager(private val session: Session) {
     
     // Probe position state
     private val DEFAULT_PROBE_X = 0.0f
-    private val DEFAULT_PROBE_Y = 0.4f
+    private val DEFAULT_PROBE_Y = 0.0f
     private var currentProbeX = DEFAULT_PROBE_X
     private var currentProbeY = DEFAULT_PROBE_Y
 
@@ -202,8 +202,9 @@ class CinemaManager(private val session: Session) {
                 addView(resetXButton)
             }
 
-            // Fixed Pose: slightly to the left, 1.2m high, 1.0m ahead
-            val controllerPose = Pose(Vector3(-0.6f, 1.2f, -1.0f), Quaternion.Identity)
+            // Fixed Pose: slightly to the left, 0.4m high (lowered from 1.2m), 1.0m ahead
+            val controllerPose = Pose(Vector3(-0.6f, 0.4f, -1.0f), Quaternion.Identity)
+            Log.i(TAG, "LOUD: Creating Startup Controller at $controllerPose")
             
             val panel = PanelEntity.create(
                 session,
