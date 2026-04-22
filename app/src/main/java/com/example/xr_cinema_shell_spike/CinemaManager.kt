@@ -43,7 +43,8 @@ class CinemaManager(private val session: Session) {
         private set
 
     private var activeActivityPanel: ActivityPanelEntity? = null
-    private var activePlainPanel: PanelEntity? = null
+    private var activeBackplatePanel: PanelEntity? = null
+    private var activeScreenPanel: PanelEntity? = null
     private var activeControllerPanel: PanelEntity? = null
     private var probeUpdateHandler: Handler? = null
     private var probeRunnable: Runnable? = null
@@ -79,8 +80,11 @@ class CinemaManager(private val session: Session) {
         activeActivityPanel?.dispose()
         activeActivityPanel = null
         
-        activePlainPanel?.dispose()
-        activePlainPanel = null
+        activeBackplatePanel?.dispose()
+        activeBackplatePanel = null
+
+        activeScreenPanel?.dispose()
+        activeScreenPanel = null
     }
 
     /**
@@ -118,10 +122,10 @@ class CinemaManager(private val session: Session) {
             }
 
             val runButton = AndroidButton(context).apply {
-                text = "RUN SCREEN SLOT"
+                text = "RUN SCREEN ASSEMBLY"
                 setOnClickListener {
-                    Log.i(TAG, "LOUD: [Spatial UI] RUN SCREEN SLOT pressed.")
-                    setupScreenSlot(context)
+                    Log.i(TAG, "LOUD: [Spatial UI] RUN SCREEN ASSEMBLY pressed.")
+                    setupScreenAssembly(context)
                 }
             }
 
@@ -138,7 +142,7 @@ class CinemaManager(private val session: Session) {
                 setOnClickListener {
                     currentProbeY -= 0.2f
                     Log.i(TAG, "LOUD: SCREEN DOWN pressed. New Y: $currentProbeY")
-                    setupScreenSlot(context)
+                    setupScreenAssembly(context)
                 }
             }
 
@@ -147,7 +151,7 @@ class CinemaManager(private val session: Session) {
                 setOnClickListener {
                     currentProbeY += 0.2f
                     Log.i(TAG, "LOUD: SCREEN UP pressed. New Y: $currentProbeY")
-                    setupScreenSlot(context)
+                    setupScreenAssembly(context)
                 }
             }
 
@@ -156,7 +160,7 @@ class CinemaManager(private val session: Session) {
                 setOnClickListener {
                     currentProbeY = DEFAULT_PROBE_Y
                     Log.i(TAG, "LOUD: RESET SCREEN HEIGHT pressed. Y: $currentProbeY")
-                    setupScreenSlot(context)
+                    setupScreenAssembly(context)
                 }
             }
 
@@ -165,7 +169,7 @@ class CinemaManager(private val session: Session) {
                 setOnClickListener {
                     currentProbeX -= 0.2f
                     Log.i(TAG, "LOUD: SCREEN LEFT pressed. New X: $currentProbeX")
-                    setupScreenSlot(context)
+                    setupScreenAssembly(context)
                 }
             }
 
@@ -174,7 +178,7 @@ class CinemaManager(private val session: Session) {
                 setOnClickListener {
                     currentProbeX += 0.2f
                     Log.i(TAG, "LOUD: SCREEN RIGHT pressed. New X: $currentProbeX")
-                    setupScreenSlot(context)
+                    setupScreenAssembly(context)
                 }
             }
 
@@ -183,7 +187,7 @@ class CinemaManager(private val session: Session) {
                 setOnClickListener {
                     currentProbeX = DEFAULT_PROBE_X
                     Log.i(TAG, "LOUD: RESET X pressed. X: $currentProbeX")
-                    setupScreenSlot(context)
+                    setupScreenAssembly(context)
                 }
             }
 
@@ -220,8 +224,9 @@ class CinemaManager(private val session: Session) {
             controllerUpdateHandler = Handler(Looper.getMainLooper())
             controllerRunnable = object : Runnable {
                 override fun run() {
-                    val slotStatus = if (activePlainPanel != null) "ACTIVE" else "None"
-                    statusView.text = "Mode: $qaMode\nSlot: $slotStatus\nX: %.1f, Y: %.1f".format(currentProbeX, currentProbeY)
+                    val assemblyActive = (activeBackplatePanel != null && activeScreenPanel != null)
+                    val slotStatus = if (assemblyActive) "ACTIVE" else "None"
+                    statusView.text = "Mode: $qaMode\nAssembly: $slotStatus\nX: %.1f, Y: %.1f".format(currentProbeX, currentProbeY)
                     controllerUpdateHandler?.postDelayed(this, 500)
                 }
             }
@@ -267,23 +272,37 @@ class CinemaManager(private val session: Session) {
     }
 
     /**
-     * Initializes a plain PanelEntity as a cinema screen slot.
+     * Initializes a anchored screen assembly (backplate + slot).
      */
-    fun setupScreenSlot(context: Context) {
-        Log.i(TAG, "LOUD: --- SETUP SCREEN SLOT ---")
-        Log.i(TAG, "LOUD: Current Slot X: $currentProbeX, Y: $currentProbeY used.")
+    fun setupScreenAssembly(context: Context) {
+        Log.i(TAG, "LOUD: --- SETUP SCREEN ASSEMBLY ---")
+        Log.i(TAG, "LOUD: screen assembly creation attempted.")
         
-        // Dispose of any old slot first
-        activePlainPanel?.dispose()
-        activePlainPanel = null
+        // Dispose of any old assembly first
+        activeBackplatePanel?.dispose()
+        activeBackplatePanel = null
+        activeScreenPanel?.dispose()
+        activeScreenPanel = null
         probeUpdateHandler?.removeCallbacksAndMessages(null)
 
         panelCreationAttempted = true
         try {
-            // Fixed Pose: currentProbeX offset, currentProbeY high, 1.5m ahead
-            val finalPose = Pose(Vector3(currentProbeX, currentProbeY, -1.5f), Quaternion.Identity)
-            Log.i(TAG, "LOUD: screen slot creation attempted at $finalPose")
+            // Poses
+            val backplatePose = Pose(Vector3(currentProbeX, currentProbeY, -1.52f), Quaternion.Identity)
+            val screenPose = Pose(Vector3(currentProbeX, currentProbeY, -1.50f), Quaternion.Identity)
+            
+            // Sizes
+            val backplateSize = FloatSize2d(3.2f, 1.8f) // Larger than screen
+            val screenSize = FloatSize2d(1.6f, 0.9f) // 16:9 ratio
 
+            // 1. Create Backplate
+            val backplateView = View(context).apply {
+                setBackgroundColor(android.graphics.Color.parseColor("#1A1A1A")) // Dark matte gray
+            }
+            activeBackplatePanel = PanelEntity.create(session, backplateView, backplateSize, "Backplate", backplatePose)
+            Log.i(TAG, "LOUD: backplate pose: $backplatePose size: $backplateSize")
+
+            // 2. Create Screen Slot
             val textView = TextView(context).apply {
                 text = "SCREEN SLOT"
                 textSize = 40f
@@ -310,21 +329,11 @@ class CinemaManager(private val session: Session) {
                 addView(innerScreen)
             }
 
-            val panelSize = FloatSize2d(1.6f, 0.9f) // 16:9 ratio
-            val panel = PanelEntity.create(
-                session,
-                outerFrame,
-                panelSize,
-                "ScreenSlot",
-                finalPose
-            )
-            
-            activePlainPanel = panel
+            activeScreenPanel = PanelEntity.create(session, outerFrame, screenSize, "ScreenSlot", screenPose)
+            Log.i(TAG, "LOUD: screen slot pose: $screenPose size: $screenSize")
+
             panelCreationSucceeded = true
-            
-            Log.i(TAG, "LOUD: screen slot creation succeeded.")
-            Log.i(TAG, "LOUD: final screen slot pose: $finalPose")
-            Log.i(TAG, "LOUD: final screen slot size: $panelSize")
+            Log.i(TAG, "LOUD: screen assembly creation succeeded.")
 
             // Live update timestamp
             probeUpdateHandler = Handler(Looper.getMainLooper())
@@ -337,9 +346,14 @@ class CinemaManager(private val session: Session) {
             probeUpdateHandler?.post(probeRunnable!!)
         } catch (e: Exception) {
             lastErrorMessage = e.message ?: "Unknown Error"
-            Log.e(TAG, "LOUD: Screen Slot FAILURE: ${e.message}", e)
+            Log.e(TAG, "LOUD: Screen Assembly FAILURE: ${e.message}", e)
         }
     }
+
+    /**
+     * Legacy method mapping for compilation if needed
+     */
+    fun setupScreenSlot(context: Context) = setupScreenAssembly(context)
 
     /**
      * Stubs for compilation
