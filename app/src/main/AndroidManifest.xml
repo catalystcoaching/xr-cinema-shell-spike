@@ -45,6 +45,12 @@
             android:exported="false"
             android:allowEmbedded="true"
             android:theme="@style/Theme.Xrcinemashellspike" />
+
+        <activity
+            android:name=".CinemaContentTestActivity"
+            android:exported="false"
+            android:allowEmbedded="true"
+            android:theme="@style/Theme.Xrcinemashellspike" />
     </application>
 
 </manifest>

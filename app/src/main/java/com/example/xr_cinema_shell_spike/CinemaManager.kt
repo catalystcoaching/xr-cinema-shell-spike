@@ -45,6 +45,7 @@ class CinemaManager(private val session: Session) {
     private var activeActivityPanel: ActivityPanelEntity? = null
     private var activeBackplatePanel: PanelEntity? = null
     private var activeScreenPanel: PanelEntity? = null
+    private var activeContentStatus: String = "None"
     private var activeControllerPanel: PanelEntity? = null
     private var probeUpdateHandler: Handler? = null
     private var probeRunnable: Runnable? = null
@@ -129,6 +130,14 @@ class CinemaManager(private val session: Session) {
                 }
             }
 
+            val runContentButton = AndroidButton(context).apply {
+                text = "RUN CONTENT PANEL TEST"
+                setOnClickListener {
+                    Log.i(TAG, "LOUD: [Spatial UI] RUN CONTENT PANEL TEST pressed.")
+                    setupContentPanelTest(context)
+                }
+            }
+
             val toggleButton = AndroidButton(context).apply {
                 text = "TOGGLE MODE"
                 setOnClickListener {
@@ -197,6 +206,7 @@ class CinemaManager(private val session: Session) {
                 addView(titleView)
                 addView(statusView)
                 addView(runButton)
+                addView(runContentButton)
                 addView(toggleButton)
                 addView(downButton)
                 addView(upButton)
@@ -224,9 +234,9 @@ class CinemaManager(private val session: Session) {
             controllerUpdateHandler = Handler(Looper.getMainLooper())
             controllerRunnable = object : Runnable {
                 override fun run() {
-                    val assemblyActive = (activeBackplatePanel != null && activeScreenPanel != null)
-                    val slotStatus = if (assemblyActive) "ACTIVE" else "None"
-                    statusView.text = "Mode: $qaMode\nAssembly: $slotStatus\nX: %.1f, Y: %.1f".format(currentProbeX, currentProbeY)
+                    val assemblyActive = (activeBackplatePanel != null && (activeScreenPanel != null || activeActivityPanel != null))
+                    val slotStatus = if (activeScreenPanel != null) "SLOT ACTIVE" else if (activeActivityPanel != null) "CONTENT ACTIVE" else "None"
+                    statusView.text = "Mode: $qaMode\nAssembly: $slotStatus\nContent: $activeContentStatus\nX: %.1f, Y: %.1f".format(currentProbeX, currentProbeY)
                     controllerUpdateHandler?.postDelayed(this, 500)
                 }
             }
@@ -277,10 +287,11 @@ class CinemaManager(private val session: Session) {
     fun setupScreenAssembly(context: Context) {
         Log.i(TAG, "LOUD: --- SETUP SCREEN ASSEMBLY ---")
         Log.i(TAG, "LOUD: screen assembly creation attempted.")
+        activeContentStatus = "SLOT_RUN"
         
         // Dispose of any old assembly first
-        activeBackplatePanel?.dispose()
-        activeBackplatePanel = null
+        activeActivityPanel?.dispose()
+        activeActivityPanel = null
         activeScreenPanel?.dispose()
         activeScreenPanel = null
         probeUpdateHandler?.removeCallbacksAndMessages(null)
@@ -347,6 +358,62 @@ class CinemaManager(private val session: Session) {
         } catch (e: Exception) {
             lastErrorMessage = e.message ?: "Unknown Error"
             Log.e(TAG, "LOUD: Screen Assembly FAILURE: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Initializes a anchored screen assembly with an ActivityPanelEntity (CONTENT PANEL TEST).
+     */
+    fun setupContentPanelTest(context: Context) {
+        Log.i(TAG, "LOUD: --- SETUP CONTENT PANEL TEST ---")
+        Log.i(TAG, "LOUD: RUN CONTENT PANEL TEST pressed.")
+        activeContentStatus = "CONTENT_ATTEMPTED"
+
+        // Dispose of any old assembly first
+        activeBackplatePanel?.dispose()
+        activeBackplatePanel = null
+        activeScreenPanel?.dispose()
+        activeScreenPanel = null
+        activeActivityPanel?.dispose()
+        activeActivityPanel = null
+        probeUpdateHandler?.removeCallbacksAndMessages(null)
+
+        try {
+            // Poses
+            val backplatePose = Pose(Vector3(currentProbeX, currentProbeY, -1.52f), Quaternion.Identity)
+            val screenPose = Pose(Vector3(currentProbeX, currentProbeY, -1.50f), Quaternion.Identity)
+            
+            // Sizes
+            val backplateSize = FloatSize2d(3.2f, 1.8f)
+            val screenSize = FloatSize2d(1.6f, 0.9f)
+            val screenSizeInt = IntSize2d(1920, 1080)
+
+            // 1. Create Backplate
+            val backplateView = View(context).apply {
+                setBackgroundColor(android.graphics.Color.parseColor("#1A1A1A"))
+            }
+            activeBackplatePanel = PanelEntity.create(session, backplateView, backplateSize, "Backplate", backplatePose)
+            Log.i(TAG, "LOUD: backplate pose: $backplatePose size: $backplateSize")
+
+            // 2. Create Activity Panel
+            Log.i(TAG, "LOUD: ActivityPanelEntity creation attempted.")
+            val panel = ActivityPanelEntity.create(session, screenSizeInt, "ContentPanel")
+            panel.setPose(screenPose, Space.ACTIVITY)
+            activeActivityPanel = panel
+            Log.i(TAG, "LOUD: ActivityPanelEntity creation succeeded.")
+            Log.i(TAG, "LOUD: final embedded panel pose: $screenPose size: $screenSize")
+
+            val intent = Intent(context, CinemaContentTestActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            Log.i(TAG, "LOUD: CinemaContentTestActivity launch attempted.")
+            panel.launchActivity(intent)
+            activeContentStatus = "CONTENT_SUCCESS"
+            Log.i(TAG, "LOUD: CinemaContentTestActivity launch succeeded.")
+
+        } catch (e: Exception) {
+            activeContentStatus = "CONTENT_FAILED"
+            Log.e(TAG, "LOUD: Content Panel Test FAILURE: ${e.message}", e)
         }
     }
 
