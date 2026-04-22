@@ -93,7 +93,7 @@ class MainActivity : ComponentActivity() {
         when (qaMode) {
             Mode.STRICT -> cinemaManager?.setupActivityPanel(this)
             Mode.DEBUG_OVERRIDE -> {
-                cinemaManager?.setupPlainPanelProbe(this)
+                cinemaManager?.setupScreenSlot(this)
                 // isUiMinimized = true // DISABLED: Manual-only diagnostic build keeps UI visible
             }
         }

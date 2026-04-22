@@ -118,10 +118,10 @@ class CinemaManager(private val session: Session) {
             }
 
             val runButton = AndroidButton(context).apply {
-                text = "RUN PROBE"
+                text = "RUN SCREEN SLOT"
                 setOnClickListener {
-                    Log.i(TAG, "LOUD: [Spatial UI] RUN PROBE pressed.")
-                    setupPlainPanelProbe(context)
+                    Log.i(TAG, "LOUD: [Spatial UI] RUN SCREEN SLOT pressed.")
+                    setupScreenSlot(context)
                 }
             }
 
@@ -134,20 +134,20 @@ class CinemaManager(private val session: Session) {
             }
 
             val downButton = AndroidButton(context).apply {
-                text = "PROBE DOWN (-0.2)"
+                text = "SCREEN DOWN (-0.2)"
                 setOnClickListener {
                     currentProbeY -= 0.2f
-                    Log.i(TAG, "LOUD: PROBE DOWN pressed. New Y: $currentProbeY")
-                    setupPlainPanelProbe(context)
+                    Log.i(TAG, "LOUD: SCREEN DOWN pressed. New Y: $currentProbeY")
+                    setupScreenSlot(context)
                 }
             }
 
             val upButton = AndroidButton(context).apply {
-                text = "PROBE UP (+0.2)"
+                text = "SCREEN UP (+0.2)"
                 setOnClickListener {
                     currentProbeY += 0.2f
-                    Log.i(TAG, "LOUD: PROBE UP pressed. New Y: $currentProbeY")
-                    setupPlainPanelProbe(context)
+                    Log.i(TAG, "LOUD: SCREEN UP pressed. New Y: $currentProbeY")
+                    setupScreenSlot(context)
                 }
             }
 
@@ -155,26 +155,26 @@ class CinemaManager(private val session: Session) {
                 text = "RESET HEIGHT"
                 setOnClickListener {
                     currentProbeY = DEFAULT_PROBE_Y
-                    Log.i(TAG, "LOUD: RESET PROBE HEIGHT pressed. Y: $currentProbeY")
-                    setupPlainPanelProbe(context)
+                    Log.i(TAG, "LOUD: RESET SCREEN HEIGHT pressed. Y: $currentProbeY")
+                    setupScreenSlot(context)
                 }
             }
 
             val leftButton = AndroidButton(context).apply {
-                text = "PROBE LEFT (-0.2)"
+                text = "SCREEN LEFT (-0.2)"
                 setOnClickListener {
                     currentProbeX -= 0.2f
-                    Log.i(TAG, "LOUD: PROBE LEFT pressed. New X: $currentProbeX")
-                    setupPlainPanelProbe(context)
+                    Log.i(TAG, "LOUD: SCREEN LEFT pressed. New X: $currentProbeX")
+                    setupScreenSlot(context)
                 }
             }
 
             val rightButton = AndroidButton(context).apply {
-                text = "PROBE RIGHT (+0.2)"
+                text = "SCREEN RIGHT (+0.2)"
                 setOnClickListener {
                     currentProbeX += 0.2f
-                    Log.i(TAG, "LOUD: PROBE RIGHT pressed. New X: $currentProbeX")
-                    setupPlainPanelProbe(context)
+                    Log.i(TAG, "LOUD: SCREEN RIGHT pressed. New X: $currentProbeX")
+                    setupScreenSlot(context)
                 }
             }
 
@@ -183,7 +183,7 @@ class CinemaManager(private val session: Session) {
                 setOnClickListener {
                     currentProbeX = DEFAULT_PROBE_X
                     Log.i(TAG, "LOUD: RESET X pressed. X: $currentProbeX")
-                    setupPlainPanelProbe(context)
+                    setupScreenSlot(context)
                 }
             }
 
@@ -220,8 +220,8 @@ class CinemaManager(private val session: Session) {
             controllerUpdateHandler = Handler(Looper.getMainLooper())
             controllerRunnable = object : Runnable {
                 override fun run() {
-                    val probeStatus = if (activePlainPanel != null) "ACTIVE" else "None"
-                    statusView.text = "Mode: $qaMode\nProbe: $probeStatus\nX: %.1f, Y: %.1f".format(currentProbeX, currentProbeY)
+                    val slotStatus = if (activePlainPanel != null) "ACTIVE" else "None"
+                    statusView.text = "Mode: $qaMode\nSlot: $slotStatus\nX: %.1f, Y: %.1f".format(currentProbeX, currentProbeY)
                     controllerUpdateHandler?.postDelayed(this, 500)
                 }
             }
@@ -267,15 +267,13 @@ class CinemaManager(private val session: Session) {
     }
 
     /**
-     * Initializes a plain PanelEntity probe (DEBUG_OVERRIDE mode).
-     * USES A FIXED POSE TO AVOID HEAD-TRACKING DEPENDENCY.
+     * Initializes a plain PanelEntity as a cinema screen slot.
      */
-    fun setupPlainPanelProbe(context: Context) {
-        Log.i(TAG, "LOUD: --- SETUP PLAIN PANEL PROBE (DEBUG_OVERRIDE) ---")
-        Log.i(TAG, "LOUD: [BYPASS] Head-tracking dependency removed. Using Fixed Pose.")
-        Log.i(TAG, "LOUD: Current Probe X: $currentProbeX, Y: $currentProbeY used.")
+    fun setupScreenSlot(context: Context) {
+        Log.i(TAG, "LOUD: --- SETUP SCREEN SLOT ---")
+        Log.i(TAG, "LOUD: Current Slot X: $currentProbeX, Y: $currentProbeY used.")
         
-        // Dispose of any old probe first
+        // Dispose of any old slot first
         activePlainPanel?.dispose()
         activePlainPanel = null
         probeUpdateHandler?.removeCallbacksAndMessages(null)
@@ -284,52 +282,62 @@ class CinemaManager(private val session: Session) {
         try {
             // Fixed Pose: currentProbeX offset, currentProbeY high, 1.5m ahead
             val finalPose = Pose(Vector3(currentProbeX, currentProbeY, -1.5f), Quaternion.Identity)
-            Log.i(TAG, "LOUD: Fixed Probe Pose used: $finalPose")
+            Log.i(TAG, "LOUD: screen slot creation attempted at $finalPose")
 
             val textView = TextView(context).apply {
-                text = "PLAIN PANEL PROBE\n(INITIALIZING)"
-                textSize = 50f
-                setTextColor(android.graphics.Color.BLACK)
-                setBackgroundColor(android.graphics.Color.YELLOW)
+                text = "SCREEN SLOT"
+                textSize = 40f
+                setTextColor(android.graphics.Color.WHITE)
                 gravity = Gravity.CENTER
-                setPadding(50, 50, 50, 50)
-            }
-            
-            val container = FrameLayout(context).apply {
-                setBackgroundColor(android.graphics.Color.RED)
-                setPadding(20, 20, 20, 20)
-                addView(textView)
             }
 
-            val panelSize = FloatSize2d(1.5f, 1.0f)
+            val timestampView = TextView(context).apply {
+                text = Date().toString()
+                textSize = 12f
+                setTextColor(android.graphics.Color.GRAY)
+                gravity = Gravity.BOTTOM or Gravity.END
+            }
+            
+            val innerScreen = FrameLayout(context).apply {
+                setBackgroundColor(android.graphics.Color.DKGRAY)
+                addView(textView)
+                addView(timestampView)
+            }
+
+            val outerFrame = FrameLayout(context).apply {
+                setBackgroundColor(android.graphics.Color.BLACK)
+                setPadding(20, 20, 20, 20)
+                addView(innerScreen)
+            }
+
+            val panelSize = FloatSize2d(1.6f, 0.9f) // 16:9 ratio
             val panel = PanelEntity.create(
                 session,
-                container,
+                outerFrame,
                 panelSize,
-                "ProbePanel",
+                "ScreenSlot",
                 finalPose
             )
             
             activePlainPanel = panel
             panelCreationSucceeded = true
             
-            Log.i(TAG, "LOUD: Plain Panel Probe SUCCESS.")
-            Log.i(TAG, "LOUD: Probe Pose: $finalPose")
-            Log.i(TAG, "LOUD: Probe Size: $panelSize")
+            Log.i(TAG, "LOUD: screen slot creation succeeded.")
+            Log.i(TAG, "LOUD: final screen slot pose: $finalPose")
+            Log.i(TAG, "LOUD: final screen slot size: $panelSize")
 
-            // Live update counter
+            // Live update timestamp
             probeUpdateHandler = Handler(Looper.getMainLooper())
             probeRunnable = object : Runnable {
-                var ticks = 0
                 override fun run() {
-                    textView.text = "PLAIN PANEL PROBE\nTicks: ${ticks++}\n${Date()}"
+                    timestampView.text = Date().toString()
                     probeUpdateHandler?.postDelayed(this, 1000)
                 }
             }
             probeUpdateHandler?.post(probeRunnable!!)
         } catch (e: Exception) {
             lastErrorMessage = e.message ?: "Unknown Error"
-            Log.e(TAG, "LOUD: Plain Panel Probe FAILURE: ${e.message}", e)
+            Log.e(TAG, "LOUD: Screen Slot FAILURE: ${e.message}", e)
         }
     }
 
