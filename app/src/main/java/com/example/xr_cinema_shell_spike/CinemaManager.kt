@@ -138,6 +138,14 @@ class CinemaManager(private val session: Session) {
                 }
             }
 
+            val runExternalButton = AndroidButton(context).apply {
+                text = "RUN EXTERNAL APP TEST"
+                setOnClickListener {
+                    Log.i(TAG, "LOUD: [Spatial UI] RUN EXTERNAL APP TEST pressed.")
+                    setupExternalAppTest(context)
+                }
+            }
+
             val toggleButton = AndroidButton(context).apply {
                 text = "TOGGLE MODE"
                 setOnClickListener {
@@ -207,6 +215,7 @@ class CinemaManager(private val session: Session) {
                 addView(statusView)
                 addView(runButton)
                 addView(runContentButton)
+                addView(runExternalButton)
                 addView(toggleButton)
                 addView(downButton)
                 addView(upButton)
@@ -234,9 +243,18 @@ class CinemaManager(private val session: Session) {
             controllerUpdateHandler = Handler(Looper.getMainLooper())
             controllerRunnable = object : Runnable {
                 override fun run() {
-                    val assemblyActive = (activeBackplatePanel != null && (activeScreenPanel != null || activeActivityPanel != null))
-                    val slotStatus = if (activeScreenPanel != null) "SLOT ACTIVE" else if (activeActivityPanel != null) "CONTENT ACTIVE" else "None"
-                    statusView.text = "Mode: $qaMode\nAssembly: $slotStatus\nContent: $activeContentStatus\nX: %.1f, Y: %.1f".format(currentProbeX, currentProbeY)
+                    val slotActive = activeScreenPanel != null
+                    val internalActive = activeActivityPanel != null && activeContentStatus.contains("CONTENT")
+                    val externalActive = activeActivityPanel != null && activeContentStatus.contains("EXTERNAL")
+                    
+                    val slotStatus = when {
+                        slotActive -> "SLOT ACTIVE"
+                        internalActive -> "INTERNAL ACTIVE"
+                        externalActive -> "EXTERNAL ACTIVE"
+                        else -> "None"
+                    }
+                    
+                    statusView.text = "Mode: $qaMode\nAssembly: $slotStatus\nStatus: $activeContentStatus\nX: %.1f, Y: %.1f".format(currentProbeX, currentProbeY)
                     controllerUpdateHandler?.postDelayed(this, 500)
                 }
             }
@@ -414,6 +432,71 @@ class CinemaManager(private val session: Session) {
         } catch (e: Exception) {
             activeContentStatus = "CONTENT_FAILED"
             Log.e(TAG, "LOUD: Content Panel Test FAILURE: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Initializes a anchored screen assembly with an ActivityPanelEntity launching an external app.
+     */
+    fun setupExternalAppTest(context: Context) {
+        Log.i(TAG, "LOUD: --- SETUP EXTERNAL APP TEST ---")
+        Log.i(TAG, "LOUD: RUN EXTERNAL APP TEST pressed.")
+        activeContentStatus = "EXTERNAL_ATTEMPTED"
+
+        // Dispose of any old assembly first
+        activeBackplatePanel?.dispose()
+        activeBackplatePanel = null
+        activeScreenPanel?.dispose()
+        activeScreenPanel = null
+        activeActivityPanel?.dispose()
+        activeActivityPanel = null
+        probeUpdateHandler?.removeCallbacksAndMessages(null)
+
+        try {
+            // Poses
+            val backplatePose = Pose(Vector3(currentProbeX, currentProbeY, -1.52f), Quaternion.Identity)
+            val screenPose = Pose(Vector3(currentProbeX, currentProbeY, -1.50f), Quaternion.Identity)
+            
+            // Sizes
+            val backplateSize = FloatSize2d(3.2f, 1.8f)
+            val screenSizeInt = IntSize2d(1920, 1080)
+
+            // 1. Create Backplate
+            val backplateView = View(context).apply {
+                setBackgroundColor(android.graphics.Color.parseColor("#1A1A1A"))
+            }
+            activeBackplatePanel = PanelEntity.create(session, backplateView, backplateSize, "Backplate", backplatePose)
+            Log.i(TAG, "LOUD: backplate pose: $backplatePose size: $backplateSize")
+
+            // 2. Resolve External App (Chrome as default target)
+            val packageName = "com.android.chrome"
+            Log.i(TAG, "LOUD: external app resolution attempted for: $packageName")
+            val intent = context.packageManager.getLaunchIntentForPackage(packageName)
+            
+            if (intent == null) {
+                activeContentStatus = "EXTERNAL_FAIL_RESOLVE"
+                Log.e(TAG, "LOUD: external app resolution failed: package not found ($packageName)")
+                return
+            }
+            Log.i(TAG, "LOUD: resolved external package: ${intent.component?.packageName}")
+
+            // 3. Create Activity Panel
+            Log.i(TAG, "LOUD: ActivityPanelEntity creation attempted.")
+            val panel = ActivityPanelEntity.create(session, screenSizeInt, "ExternalAppPanel")
+            panel.setPose(screenPose, Space.ACTIVITY)
+            activeActivityPanel = panel
+            Log.i(TAG, "LOUD: ActivityPanelEntity creation succeeded.")
+            Log.i(TAG, "LOUD: final embedded panel pose: $screenPose size: 1.6x0.9")
+
+            // 4. Launch External Activity
+            Log.i(TAG, "LOUD: external app launch attempted.")
+            panel.launchActivity(intent)
+            activeContentStatus = "EXTERNAL_SUCCESS ($packageName)"
+            Log.i(TAG, "LOUD: external app launch succeeded.")
+
+        } catch (e: Exception) {
+            activeContentStatus = "EXTERNAL_CRASH"
+            Log.e(TAG, "LOUD: External App Test FAILURE: ${e.message}", e)
         }
     }
 
