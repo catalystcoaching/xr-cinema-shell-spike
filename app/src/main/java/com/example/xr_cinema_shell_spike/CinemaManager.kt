@@ -53,6 +53,10 @@ class CinemaManager(private val session: Session) {
     private var probeRunnable: Runnable? = null
     private var controllerUpdateHandler: Handler? = null
     private var controllerRunnable: Runnable? = null
+    
+    // App Picker state
+    private var appCandidates: List<android.content.pm.ResolveInfo> = emptyList()
+    private var selectedCandidateIndex: Int = -1
 
     var qaMode: String = "DEBUG_OVERRIDE" // Local state for the spatial controller
     
@@ -210,6 +214,39 @@ class CinemaManager(private val session: Session) {
                 }
             }
 
+            val refreshAppsButton = AndroidButton(context).apply {
+                text = "REFRESH APP LIST"
+                setOnClickListener {
+                    Log.i(TAG, "LOUD: [Spatial UI] REFRESH APP LIST pressed.")
+                    refreshAppCandidates(context)
+                }
+            }
+
+            val appListText = TextView(context).apply {
+                text = "No apps discovered."
+                textSize = 14f
+                setTextColor(android.graphics.Color.YELLOW)
+                gravity = Gravity.CENTER
+            }
+
+            val launchSelectedButton = AndroidButton(context).apply {
+                text = "LAUNCH SELECTED APP"
+                setOnClickListener {
+                    Log.i(TAG, "LOUD: [Spatial UI] LAUNCH SELECTED APP pressed.")
+                    launchSelectedApp(context)
+                }
+            }
+
+            val nextAppButton = AndroidButton(context).apply {
+                text = "NEXT APP"
+                setOnClickListener {
+                    if (appCandidates.isNotEmpty()) {
+                        selectedCandidateIndex = (selectedCandidateIndex + 1) % appCandidates.size
+                        Log.i(TAG, "LOUD: [Spatial UI] NEXT APP pressed. Index: $selectedCandidateIndex")
+                    }
+                }
+            }
+
             val layout = ColumnLayout(context).apply {
                 setBackgroundColor(android.graphics.Color.BLUE)
                 setPadding(40, 40, 40, 40)
@@ -225,16 +262,30 @@ class CinemaManager(private val session: Session) {
                 addView(leftButton)
                 addView(rightButton)
                 addView(resetXButton)
+                addView(android.view.View(context).apply { minimumHeight = 20 }) // Spacer
+                addView(refreshAppsButton)
+                addView(appListText)
+                addView(nextAppButton)
+                addView(launchSelectedButton)
+            }
+
+            val scrollView = android.widget.ScrollView(context).apply {
+                layoutParams = android.view.ViewGroup.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                addView(layout)
             }
 
             // Fixed Pose: slightly to the left, 0.4m high (lowered from 1.2m), 1.0m ahead
             val controllerPose = Pose(Vector3(-0.6f, 0.4f, -1.0f), Quaternion.Identity)
             Log.i(TAG, "LOUD: Creating Startup Controller at $controllerPose")
+            Log.i(TAG, "LOUD: Startup Controller layout is now scrollable.")
             
             val panel = PanelEntity.create(
                 session,
-                layout,
-                FloatSize2d(0.8f, 0.6f),
+                scrollView,
+                FloatSize2d(0.8f, 1.4f),
                 "ControllerPanel",
                 controllerPose
             )
@@ -257,6 +308,19 @@ class CinemaManager(private val session: Session) {
                     }
                     
                     statusView.text = "Mode: $qaMode\nAssembly: $slotStatus\nStatus: $activeContentStatus\nX: %.1f, Y: %.1f".format(currentProbeX, currentProbeY)
+                    
+                    if (appCandidates.isEmpty()) {
+                        appListText.text = "No apps discovered. Press REFRESH."
+                    } else if (selectedCandidateIndex in appCandidates.indices) {
+                        val candidate = appCandidates[selectedCandidateIndex]
+                        appListText.text = "Selected (%d/%d):\n%s\n%s".format(
+                            selectedCandidateIndex + 1,
+                            appCandidates.size,
+                            candidate.activityInfo.packageName,
+                            candidate.activityInfo.name.split(".").last()
+                        )
+                    }
+
                     controllerUpdateHandler?.postDelayed(this, 500)
                 }
             }
@@ -525,6 +589,96 @@ class CinemaManager(private val session: Session) {
         } catch (e: Exception) {
             activeContentStatus = "EXTERNAL_CRASH: ${e.message}"
             Log.e(TAG, "LOUD: External App Test FAILURE: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Discovers browser and launcher candidates.
+     */
+    private fun refreshAppCandidates(context: Context) {
+        Log.i(TAG, "LOUD: Refreshing app candidates...")
+        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"))
+        val browsers = context.packageManager.queryIntentActivities(browserIntent, PackageManager.MATCH_ALL)
+        
+        val launcherIntent = Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
+        val launchers = context.packageManager.queryIntentActivities(launcherIntent, PackageManager.MATCH_ALL)
+        
+        // Merge and deduplicate by component name
+        val allCandidates = (browsers + launchers).distinctBy { it.activityInfo.packageName + it.activityInfo.name }
+        
+        appCandidates = allCandidates
+        selectedCandidateIndex = if (appCandidates.isNotEmpty()) 0 else -1
+        Log.i(TAG, "LOUD: Discovered ${appCandidates.size} candidates.")
+    }
+
+    /**
+     * Launches the selected app from the picker.
+     */
+    private fun launchSelectedApp(context: Context) {
+        if (selectedCandidateIndex !in appCandidates.indices) {
+            Log.e(TAG, "LOUD: No app selected to launch.")
+            return
+        }
+        
+        val candidate = appCandidates[selectedCandidateIndex]
+        val pkg = candidate.activityInfo.packageName
+        val act = candidate.activityInfo.name
+        
+        Log.i(TAG, "LOUD: Launching selected app: $pkg / $act")
+        
+        // Re-use external app test logic but with the selected component
+        setupExternalAppWithComponent(context, pkg, act)
+    }
+
+    private fun setupExternalAppWithComponent(context: Context, pkg: String, act: String) {
+        Log.i(TAG, "LOUD: --- SETUP EXTERNAL APP WITH COMPONENT ---")
+        activeContentStatus = "EXTERNAL_PICKER_ATTEMPT"
+
+        activeBackplatePanel?.dispose()
+        activeBackplatePanel = null
+        activeScreenPanel?.dispose()
+        activeScreenPanel = null
+        activeActivityPanel?.dispose()
+        activeActivityPanel = null
+        probeUpdateHandler?.removeCallbacksAndMessages(null)
+
+        try {
+            val backplatePose = Pose(Vector3(currentProbeX, currentProbeY, -1.52f), Quaternion.Identity)
+            val screenPose = Pose(Vector3(currentProbeX, currentProbeY, -1.50f), Quaternion.Identity)
+            val backplateSize = FloatSize2d(3.2f, 1.8f)
+            val screenSizeInt = IntSize2d(1920, 1080)
+
+            val backplateView = View(context).apply {
+                setBackgroundColor(android.graphics.Color.parseColor("#1A1A1A"))
+            }
+            activeBackplatePanel = PanelEntity.create(session, backplateView, backplateSize, "Backplate", backplatePose)
+
+            // Determine if we should use ACTION_VIEW (for browsers) or ACTION_MAIN
+            val isBrowser = pkg.contains("chrome") || pkg.contains("browser") // Simple heuristic
+            val intent = if (isBrowser) {
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com")).apply {
+                    setClassName(pkg, act)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            } else {
+                Intent(Intent.ACTION_MAIN).apply {
+                    setClassName(pkg, act)
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            }
+
+            val panel = ActivityPanelEntity.create(session, screenSizeInt, "ExternalAppPanel")
+            panel.setPose(screenPose, Space.ACTIVITY)
+            activeActivityPanel = panel
+
+            Log.i(TAG, "LOUD: Launching explicit component: $pkg / $act")
+            panel.launchActivity(intent)
+            activeContentStatus = "EXTERNAL_SUCCESS: $pkg"
+            Log.i(TAG, "LOUD: External app launch succeeded.")
+        } catch (e: Exception) {
+            activeContentStatus = "EXTERNAL_FAIL: ${e.message}"
+            Log.e(TAG, "LOUD: External app launch failed: ${e.message}", e)
         }
     }
 
