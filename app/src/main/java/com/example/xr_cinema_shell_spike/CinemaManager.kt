@@ -14,6 +14,8 @@ import androidx.xr.runtime.math.Quaternion
 import androidx.xr.runtime.math.Vector3
 import android.os.Handler
 import android.os.Looper
+import android.net.Uri
+import android.content.pm.PackageManager
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
@@ -468,17 +470,38 @@ class CinemaManager(private val session: Session) {
             activeBackplatePanel = PanelEntity.create(session, backplateView, backplateSize, "Backplate", backplatePose)
             Log.i(TAG, "LOUD: backplate pose: $backplatePose size: $backplateSize")
 
-            // 2. Resolve External App (Chrome as default target)
-            val packageName = "com.android.chrome"
-            Log.i(TAG, "LOUD: external app resolution attempted for: $packageName")
-            val intent = context.packageManager.getLaunchIntentForPackage(packageName)
+            // 2. Resolve External App (Browser candidate discovery)
+            Log.i(TAG, "LOUD: browser candidate discovery attempted via queryIntentActivities.")
+            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"))
+            val candidates = context.packageManager.queryIntentActivities(browserIntent, PackageManager.MATCH_ALL)
             
-            if (intent == null) {
-                activeContentStatus = "EXTERNAL_FAIL_RESOLVE"
-                Log.e(TAG, "LOUD: external app resolution failed: package not found ($packageName)")
+            Log.i(TAG, "LOUD: number of browser candidates found: ${candidates.size}")
+            
+            val explicitIntent = if (candidates.isNotEmpty()) {
+                // Deterministically choose the first candidate
+                val resolveInfo = candidates[0]
+                val pkg = resolveInfo.activityInfo.packageName
+                val act = resolveInfo.activityInfo.name
+                Log.i(TAG, "LOUD: chosen browser candidate package: $pkg")
+                Log.i(TAG, "LOUD: chosen browser candidate activity: $act")
+                activeContentStatus = "EXTERNAL_RESOLVED (${candidates.size}): $pkg\n$act"
+                
+                // Build explicit intent
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com")).apply {
+                    setClassName(pkg, act)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            } else {
+                null
+            }
+            
+            if (explicitIntent == null) {
+                activeContentStatus = "EXTERNAL_FAIL_RESOLVE (0 candidates)"
+                Log.e(TAG, "LOUD: browser resolution failed: zero candidates found for ACTION_VIEW")
                 return
             }
-            Log.i(TAG, "LOUD: resolved external package: ${intent.component?.packageName}")
+            val resolvedPkg = explicitIntent.component?.packageName ?: "Unknown"
+            val resolvedAct = explicitIntent.component?.className ?: "Unknown"
 
             // 3. Create Activity Panel
             Log.i(TAG, "LOUD: ActivityPanelEntity creation attempted.")
@@ -489,13 +512,18 @@ class CinemaManager(private val session: Session) {
             Log.i(TAG, "LOUD: final embedded panel pose: $screenPose size: 1.6x0.9")
 
             // 4. Launch External Activity
-            Log.i(TAG, "LOUD: external app launch attempted.")
-            panel.launchActivity(intent)
-            activeContentStatus = "EXTERNAL_SUCCESS ($packageName)"
-            Log.i(TAG, "LOUD: external app launch succeeded.")
+            Log.i(TAG, "LOUD: external explicit app launch attempted for $resolvedPkg / $resolvedAct")
+            try {
+                panel.launchActivity(explicitIntent)
+                activeContentStatus = "EXTERNAL_SUCCESS: $resolvedPkg"
+                Log.i(TAG, "LOUD: external app launch succeeded.")
+            } catch (e: Exception) {
+                activeContentStatus = "EXTERNAL_LAUNCH_FAIL: ${e.message}"
+                Log.e(TAG, "LOUD: external app launch failed: ${e.message}")
+            }
 
         } catch (e: Exception) {
-            activeContentStatus = "EXTERNAL_CRASH"
+            activeContentStatus = "EXTERNAL_CRASH: ${e.message}"
             Log.e(TAG, "LOUD: External App Test FAILURE: ${e.message}", e)
         }
     }
