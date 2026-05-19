@@ -180,6 +180,14 @@ class CinemaManager(private val session: Session) {
                 }
             }
 
+            val verifyEnvironmentAssetButton = AndroidButton(context).apply {
+                text = "VERIFY ENV ASSET"
+                setOnClickListener {
+                    Log.i(TAG, "LOUD: [Spatial UI] VERIFY ENV ASSET pressed.")
+                    verifyEnvironmentAsset(context)
+                }
+            }
+
             val toggleButton = AndroidButton(context).apply {
                 text = "TOGGLE MODE"
                 setOnClickListener {
@@ -283,6 +291,7 @@ class CinemaManager(private val session: Session) {
                 addView(runButton)
                 addView(runContentButton)
                 addView(runExternalButton)
+                addView(verifyEnvironmentAssetButton)
                 addView(toggleButton)
                 addView(downButton)
                 addView(upButton)
@@ -366,6 +375,22 @@ class CinemaManager(private val session: Session) {
         init {
             orientation = VERTICAL
             gravity = Gravity.CENTER
+        }
+    }
+
+    /**
+     * Verifies that the first cinema environment model is packaged in app assets.
+     */
+    fun verifyEnvironmentAsset(context: Context) {
+        Log.i(TAG, "LOUD: --- VERIFY ENVIRONMENT ASSET ---")
+        val assetPath = "environment/candidate_01/cinema.glb"
+        try {
+            val sizeBytes = context.assets.open(assetPath).use { it.readBytes().size }
+            activeContentStatus = "ENV_ASSET_OK: $sizeBytes bytes"
+            Log.i(TAG, "LOUD: environment asset open succeeded for $assetPath ($sizeBytes bytes)")
+        } catch (e: Exception) {
+            activeContentStatus = "ENV_ASSET_FAIL: ${e.message}"
+            Log.e(TAG, "LOUD: environment asset open failed for $assetPath: ${e.message}", e)
         }
     }
 
