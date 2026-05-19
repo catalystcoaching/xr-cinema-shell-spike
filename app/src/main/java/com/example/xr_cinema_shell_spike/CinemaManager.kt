@@ -66,6 +66,34 @@ class CinemaManager(private val session: Session) {
     private var currentProbeX = DEFAULT_PROBE_X
     private var currentProbeY = DEFAULT_PROBE_Y
 
+    // Proven baseline - keep unchanged during environment proof
+    private val BASE_BACKPLATE_Z = -1.52f
+    private val BASE_SCREEN_Z = -1.50f
+
+    private val BASE_BACKPLATE_WIDTH = 3.2f
+    private val BASE_BACKPLATE_HEIGHT = 1.8f
+
+    private val BASE_SCREEN_WIDTH = 1.6f
+    private val BASE_SCREEN_HEIGHT = 0.9f
+
+    private val BASE_SCREEN_PIXEL_WIDTH = 1920
+    private val BASE_SCREEN_PIXEL_HEIGHT = 1080
+
+    private fun getBackplatePose(): Pose =
+        Pose(Vector3(currentProbeX, currentProbeY, BASE_BACKPLATE_Z), Quaternion.Identity)
+
+    private fun getScreenPose(): Pose =
+        Pose(Vector3(currentProbeX, currentProbeY, BASE_SCREEN_Z), Quaternion.Identity)
+
+    private fun getBackplateSize(): FloatSize2d =
+        FloatSize2d(BASE_BACKPLATE_WIDTH, BASE_BACKPLATE_HEIGHT)
+
+    private fun getScreenSize(): FloatSize2d =
+        FloatSize2d(BASE_SCREEN_WIDTH, BASE_SCREEN_HEIGHT)
+
+    private fun getScreenSizeInt(): IntSize2d =
+        IntSize2d(BASE_SCREEN_PIXEL_WIDTH, BASE_SCREEN_PIXEL_HEIGHT)
+
     var lastErrorMessage: String by mutableStateOf("")
         private set
 
@@ -383,12 +411,12 @@ class CinemaManager(private val session: Session) {
         panelCreationAttempted = true
         try {
             // Poses
-            val backplatePose = Pose(Vector3(currentProbeX, currentProbeY, -1.52f), Quaternion.Identity)
-            val screenPose = Pose(Vector3(currentProbeX, currentProbeY, -1.50f), Quaternion.Identity)
+            val backplatePose = getBackplatePose()
+            val screenPose = getScreenPose()
             
             // Sizes
-            val backplateSize = FloatSize2d(3.2f, 1.8f) // Larger than screen
-            val screenSize = FloatSize2d(1.6f, 0.9f) // 16:9 ratio
+            val backplateSize = getBackplateSize() // Larger than screen
+            val screenSize = getScreenSize() // 16:9 ratio
 
             // 1. Create Backplate
             val backplateView = View(context).apply {
@@ -464,13 +492,13 @@ class CinemaManager(private val session: Session) {
 
         try {
             // Poses
-            val backplatePose = Pose(Vector3(currentProbeX, currentProbeY, -1.52f), Quaternion.Identity)
-            val screenPose = Pose(Vector3(currentProbeX, currentProbeY, -1.50f), Quaternion.Identity)
+            val backplatePose = getBackplatePose()
+            val screenPose = getScreenPose()
             
             // Sizes
-            val backplateSize = FloatSize2d(3.2f, 1.8f)
-            val screenSize = FloatSize2d(1.6f, 0.9f)
-            val screenSizeInt = IntSize2d(1920, 1080)
+            val backplateSize = getBackplateSize()
+            val screenSize = getScreenSize()
+            val screenSizeInt = getScreenSizeInt()
 
             // 1. Create Backplate
             val backplateView = View(context).apply {
@@ -520,12 +548,13 @@ class CinemaManager(private val session: Session) {
 
         try {
             // Poses
-            val backplatePose = Pose(Vector3(currentProbeX, currentProbeY, -1.52f), Quaternion.Identity)
-            val screenPose = Pose(Vector3(currentProbeX, currentProbeY, -1.50f), Quaternion.Identity)
+            val backplatePose = getBackplatePose()
+            val screenPose = getScreenPose()
             
             // Sizes
-            val backplateSize = FloatSize2d(3.2f, 1.8f)
-            val screenSizeInt = IntSize2d(1920, 1080)
+            val backplateSize = getBackplateSize()
+            val screenSize = getScreenSize()
+            val screenSizeInt = getScreenSizeInt()
 
             // 1. Create Backplate
             val backplateView = View(context).apply {
@@ -573,7 +602,7 @@ class CinemaManager(private val session: Session) {
             panel.setPose(screenPose, Space.ACTIVITY)
             activeActivityPanel = panel
             Log.i(TAG, "LOUD: ActivityPanelEntity creation succeeded.")
-            Log.i(TAG, "LOUD: final embedded panel pose: $screenPose size: 1.6x0.9")
+            Log.i(TAG, "LOUD: final embedded panel pose: $screenPose size: $screenSize")
 
             // 4. Launch External Activity
             Log.i(TAG, "LOUD: external explicit app launch attempted for $resolvedPkg / $resolvedAct")
@@ -643,10 +672,10 @@ class CinemaManager(private val session: Session) {
         probeUpdateHandler?.removeCallbacksAndMessages(null)
 
         try {
-            val backplatePose = Pose(Vector3(currentProbeX, currentProbeY, -1.52f), Quaternion.Identity)
-            val screenPose = Pose(Vector3(currentProbeX, currentProbeY, -1.50f), Quaternion.Identity)
-            val backplateSize = FloatSize2d(3.2f, 1.8f)
-            val screenSizeInt = IntSize2d(1920, 1080)
+            val backplatePose = getBackplatePose()
+            val screenPose = getScreenPose()
+            val backplateSize = getBackplateSize()
+            val screenSizeInt = getScreenSizeInt()
 
             val backplateView = View(context).apply {
                 setBackgroundColor(android.graphics.Color.parseColor("#1A1A1A"))
