@@ -23,10 +23,17 @@ import android.widget.TextView
 import android.widget.Button as AndroidButton
 import androidx.xr.runtime.math.FloatSize2d
 import androidx.xr.scenecore.ActivityPanelEntity
+import androidx.xr.scenecore.GltfModel
+import androidx.xr.scenecore.GltfModelEntity
 import androidx.xr.scenecore.PanelEntity
 import androidx.xr.scenecore.Space
 import androidx.xr.scenecore.scene
 import java.util.Date
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * CinemaManager encapsulates the logic for creating and managing the XR cinema environment.
@@ -53,6 +60,8 @@ class CinemaManager(private val session: Session) {
     private var probeRunnable: Runnable? = null
     private var controllerUpdateHandler: Handler? = null
     private var controllerRunnable: Runnable? = null
+    private var activeEnvironmentModelEntity: GltfModelEntity? = null
+    private val asyncScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     
     // App Picker state
     private var appCandidates: List<android.content.pm.ResolveInfo> = emptyList()
@@ -79,6 +88,11 @@ class CinemaManager(private val session: Session) {
     private val BASE_SCREEN_PIXEL_WIDTH = 1920
     private val BASE_SCREEN_PIXEL_HEIGHT = 1080
 
+    private val ENVIRONMENT_ASSET_PATH = "environment/candidate_01/cinema.glb"
+    private val ENVIRONMENT_ASSET_NAME = "candidate_01_cinema.glb"
+    private val ENVIRONMENT_PROBE_Y = -1.6f
+    private val ENVIRONMENT_PROBE_SCALE = 1.0f
+
     private fun getBackplatePose(): Pose =
         Pose(Vector3(currentProbeX, currentProbeY, BASE_BACKPLATE_Z), Quaternion.Identity)
 
@@ -93,6 +107,9 @@ class CinemaManager(private val session: Session) {
 
     private fun getScreenSizeInt(): IntSize2d =
         IntSize2d(BASE_SCREEN_PIXEL_WIDTH, BASE_SCREEN_PIXEL_HEIGHT)
+
+    private fun getEnvironmentProbePose(): Pose =
+        Pose(Vector3(0.0f, ENVIRONMENT_PROBE_Y, 0.0f), Quaternion.Identity)
 
     var lastErrorMessage: String by mutableStateOf("")
         private set
@@ -131,6 +148,8 @@ class CinemaManager(private val session: Session) {
         controllerUpdateHandler = null
         activeControllerPanel?.dispose()
         activeControllerPanel = null
+        activeEnvironmentModelEntity?.dispose()
+        activeEnvironmentModelEntity = null
     }
 
     /**
@@ -185,6 +204,14 @@ class CinemaManager(private val session: Session) {
                 setOnClickListener {
                     Log.i(TAG, "LOUD: [Spatial UI] VERIFY ENV ASSET pressed.")
                     verifyEnvironmentAsset(context)
+                }
+            }
+
+            val loadCinemaRoomProbeButton = AndroidButton(context).apply {
+                text = "LOAD CINEMA ROOM PROBE"
+                setOnClickListener {
+                    Log.i(TAG, "LOUD: [Spatial UI] LOAD CINEMA ROOM PROBE pressed.")
+                    loadCinemaRoomProbe(context)
                 }
             }
 
@@ -292,6 +319,7 @@ class CinemaManager(private val session: Session) {
                 addView(runContentButton)
                 addView(runExternalButton)
                 addView(verifyEnvironmentAssetButton)
+                addView(loadCinemaRoomProbeButton)
                 addView(toggleButton)
                 addView(downButton)
                 addView(upButton)
@@ -383,7 +411,7 @@ class CinemaManager(private val session: Session) {
      */
     fun verifyEnvironmentAsset(context: Context) {
         Log.i(TAG, "LOUD: --- VERIFY ENVIRONMENT ASSET ---")
-        val assetPath = "environment/candidate_01/cinema.glb"
+        val assetPath = ENVIRONMENT_ASSET_PATH
         try {
             val sizeBytes = context.assets.open(assetPath).use { it.readBytes().size }
             activeContentStatus = "ENV_ASSET_OK: $sizeBytes bytes"
@@ -391,6 +419,42 @@ class CinemaManager(private val session: Session) {
         } catch (e: Exception) {
             activeContentStatus = "ENV_ASSET_FAIL: ${e.message}"
             Log.e(TAG, "LOUD: environment asset open failed for $assetPath: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Loads the first cinema room model as passive scenery without touching the working screen assembly.
+     */
+    fun loadCinemaRoomProbe(context: Context) {
+        Log.i(TAG, "LOUD: --- LOAD CINEMA ROOM PROBE ---")
+        activeContentStatus = "ENV_MODEL_ATTEMPTED"
+
+        asyncScope.launch {
+            try {
+                val modelBytes = withContext(Dispatchers.IO) {
+                    context.assets.open(ENVIRONMENT_ASSET_PATH).use { it.readBytes() }
+                }
+
+                Log.i(TAG, "LOUD: cinema room probe bytes read: ${modelBytes.size}")
+
+                val model = GltfModel.create(session, modelBytes, ENVIRONMENT_ASSET_NAME)
+
+                activeEnvironmentModelEntity?.dispose()
+                activeEnvironmentModelEntity = GltfModelEntity.create(session, model, getEnvironmentProbePose()).also { entity ->
+                    entity.setScale(ENVIRONMENT_PROBE_SCALE)
+                    entity.setAlpha(1.0f)
+                    entity.setEnabled(true)
+                }
+
+                activeContentStatus = "ENV_MODEL_SUCCESS"
+                Log.i(
+                    TAG,
+                    "LOUD: cinema room probe created at ${getEnvironmentProbePose()} scale: $ENVIRONMENT_PROBE_SCALE"
+                )
+            } catch (e: Exception) {
+                activeContentStatus = "ENV_MODEL_FAIL: ${e.message}"
+                Log.e(TAG, "LOUD: cinema room probe load failed: ${e.message}", e)
+            }
         }
     }
 
