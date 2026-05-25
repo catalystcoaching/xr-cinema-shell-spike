@@ -90,8 +90,16 @@ class CinemaManager(private val session: Session) {
 
     private val ENVIRONMENT_ASSET_PATH = "environment/candidate_01/cinema.glb"
     private val ENVIRONMENT_ASSET_NAME = "candidate_01_cinema.glb"
-    private val ENVIRONMENT_PROBE_Y = -1.6f
-    private val ENVIRONMENT_PROBE_SCALE = 1.0f
+
+    private val DEFAULT_ENVIRONMENT_PROBE_X = 0.0f
+    private val DEFAULT_ENVIRONMENT_PROBE_Y = -1.6f
+    private val DEFAULT_ENVIRONMENT_PROBE_Z = 0.0f
+    private val DEFAULT_ENVIRONMENT_PROBE_SCALE = 1.0f
+
+    private var currentEnvironmentProbeX = DEFAULT_ENVIRONMENT_PROBE_X
+    private var currentEnvironmentProbeY = DEFAULT_ENVIRONMENT_PROBE_Y
+    private var currentEnvironmentProbeZ = DEFAULT_ENVIRONMENT_PROBE_Z
+    private var currentEnvironmentProbeScale = DEFAULT_ENVIRONMENT_PROBE_SCALE
 
     private fun getBackplatePose(): Pose =
         Pose(Vector3(currentProbeX, currentProbeY, BASE_BACKPLATE_Z), Quaternion.Identity)
@@ -109,7 +117,49 @@ class CinemaManager(private val session: Session) {
         IntSize2d(BASE_SCREEN_PIXEL_WIDTH, BASE_SCREEN_PIXEL_HEIGHT)
 
     private fun getEnvironmentProbePose(): Pose =
-        Pose(Vector3(0.0f, ENVIRONMENT_PROBE_Y, 0.0f), Quaternion.Identity)
+        Pose(
+            Vector3(
+                currentEnvironmentProbeX,
+                currentEnvironmentProbeY,
+                currentEnvironmentProbeZ
+            ),
+            Quaternion.Identity
+        )
+
+    private fun applyEnvironmentProbeTransform() {
+        val entity = activeEnvironmentModelEntity
+        if (entity == null) {
+            Log.i(TAG, "LOUD: cinema room probe transform skipped: no active environment model.")
+            return
+        }
+
+        val pose = getEnvironmentProbePose()
+        entity.setPose(pose)
+        entity.setScale(currentEnvironmentProbeScale)
+        entity.setAlpha(1.0f)
+        entity.setEnabled(true)
+
+        Log.i(
+            TAG,
+            "LOUD: cinema room probe transform applied pose: $pose scale: $currentEnvironmentProbeScale"
+        )
+    }
+
+    private fun resetEnvironmentProbeTransform() {
+        currentEnvironmentProbeX = DEFAULT_ENVIRONMENT_PROBE_X
+        currentEnvironmentProbeY = DEFAULT_ENVIRONMENT_PROBE_Y
+        currentEnvironmentProbeZ = DEFAULT_ENVIRONMENT_PROBE_Z
+        currentEnvironmentProbeScale = DEFAULT_ENVIRONMENT_PROBE_SCALE
+        applyEnvironmentProbeTransform()
+        Log.i(TAG, "LOUD: cinema room probe transform reset.")
+    }
+
+    fun unloadCinemaRoomProbe() {
+        activeEnvironmentModelEntity?.dispose()
+        activeEnvironmentModelEntity = null
+        activeContentStatus = "ENV_MODEL_UNLOADED"
+        Log.i(TAG, "LOUD: cinema room probe unloaded.")
+    }
 
     var lastErrorMessage: String by mutableStateOf("")
         private set
@@ -212,6 +262,94 @@ class CinemaManager(private val session: Session) {
                 setOnClickListener {
                     Log.i(TAG, "LOUD: [Spatial UI] LOAD CINEMA ROOM PROBE pressed.")
                     loadCinemaRoomProbe(context)
+                }
+            }
+
+            val roomBiggerButton = AndroidButton(context).apply {
+                text = "ROOM BIGGER (+0.25)"
+                setOnClickListener {
+                    currentEnvironmentProbeScale = (currentEnvironmentProbeScale + 0.25f).coerceAtMost(20.0f)
+                    Log.i(TAG, "LOUD: ROOM BIGGER pressed. New scale: $currentEnvironmentProbeScale")
+                    applyEnvironmentProbeTransform()
+                }
+            }
+
+            val roomSmallerButton = AndroidButton(context).apply {
+                text = "ROOM SMALLER (-0.25)"
+                setOnClickListener {
+                    currentEnvironmentProbeScale = (currentEnvironmentProbeScale - 0.25f).coerceAtLeast(0.1f)
+                    Log.i(TAG, "LOUD: ROOM SMALLER pressed. New scale: $currentEnvironmentProbeScale")
+                    applyEnvironmentProbeTransform()
+                }
+            }
+
+            val roomLeftButton = AndroidButton(context).apply {
+                text = "ROOM LEFT (-0.5)"
+                setOnClickListener {
+                    currentEnvironmentProbeX -= 0.5f
+                    Log.i(TAG, "LOUD: ROOM LEFT pressed. New X: $currentEnvironmentProbeX")
+                    applyEnvironmentProbeTransform()
+                }
+            }
+
+            val roomRightButton = AndroidButton(context).apply {
+                text = "ROOM RIGHT (+0.5)"
+                setOnClickListener {
+                    currentEnvironmentProbeX += 0.5f
+                    Log.i(TAG, "LOUD: ROOM RIGHT pressed. New X: $currentEnvironmentProbeX")
+                    applyEnvironmentProbeTransform()
+                }
+            }
+
+            val roomDownButton = AndroidButton(context).apply {
+                text = "ROOM DOWN (-0.5)"
+                setOnClickListener {
+                    currentEnvironmentProbeY -= 0.5f
+                    Log.i(TAG, "LOUD: ROOM DOWN pressed. New Y: $currentEnvironmentProbeY")
+                    applyEnvironmentProbeTransform()
+                }
+            }
+
+            val roomUpButton = AndroidButton(context).apply {
+                text = "ROOM UP (+0.5)"
+                setOnClickListener {
+                    currentEnvironmentProbeY += 0.5f
+                    Log.i(TAG, "LOUD: ROOM UP pressed. New Y: $currentEnvironmentProbeY")
+                    applyEnvironmentProbeTransform()
+                }
+            }
+
+            val roomForwardButton = AndroidButton(context).apply {
+                text = "ROOM FORWARD (-0.5)"
+                setOnClickListener {
+                    currentEnvironmentProbeZ -= 0.5f
+                    Log.i(TAG, "LOUD: ROOM FORWARD pressed. New Z: $currentEnvironmentProbeZ")
+                    applyEnvironmentProbeTransform()
+                }
+            }
+
+            val roomBackButton = AndroidButton(context).apply {
+                text = "ROOM BACK (+0.5)"
+                setOnClickListener {
+                    currentEnvironmentProbeZ += 0.5f
+                    Log.i(TAG, "LOUD: ROOM BACK pressed. New Z: $currentEnvironmentProbeZ")
+                    applyEnvironmentProbeTransform()
+                }
+            }
+
+            val roomResetButton = AndroidButton(context).apply {
+                text = "ROOM RESET"
+                setOnClickListener {
+                    Log.i(TAG, "LOUD: ROOM RESET pressed.")
+                    resetEnvironmentProbeTransform()
+                }
+            }
+
+            val roomUnloadButton = AndroidButton(context).apply {
+                text = "ROOM UNLOAD"
+                setOnClickListener {
+                    Log.i(TAG, "LOUD: ROOM UNLOAD pressed.")
+                    unloadCinemaRoomProbe()
                 }
             }
 
@@ -320,6 +458,16 @@ class CinemaManager(private val session: Session) {
                 addView(runExternalButton)
                 addView(verifyEnvironmentAssetButton)
                 addView(loadCinemaRoomProbeButton)
+                addView(roomBiggerButton)
+                addView(roomSmallerButton)
+                addView(roomLeftButton)
+                addView(roomRightButton)
+                addView(roomDownButton)
+                addView(roomUpButton)
+                addView(roomForwardButton)
+                addView(roomBackButton)
+                addView(roomResetButton)
+                addView(roomUnloadButton)
                 addView(toggleButton)
                 addView(downButton)
                 addView(upButton)
@@ -364,6 +512,7 @@ class CinemaManager(private val session: Session) {
                     val slotActive = activeScreenPanel != null
                     val internalActive = activeActivityPanel != null && activeContentStatus.contains("CONTENT")
                     val externalActive = activeActivityPanel != null && activeContentStatus.contains("EXTERNAL")
+                    val roomLoaded = activeEnvironmentModelEntity != null
                     
                     val slotStatus = when {
                         slotActive -> "SLOT ACTIVE"
@@ -372,7 +521,23 @@ class CinemaManager(private val session: Session) {
                         else -> "None"
                     }
                     
-                    statusView.text = "Mode: $qaMode\nAssembly: $slotStatus\nStatus: $activeContentStatus\nX: %.1f, Y: %.1f".format(currentProbeX, currentProbeY)
+                    statusView.text = (
+                        "Mode: $qaMode\n" +
+                            "Assembly: $slotStatus\n" +
+                            "Status: $activeContentStatus\n" +
+                            "Screen X: %.1f, Y: %.1f\n" +
+                            "Room: %s\n" +
+                            "Room XYZ: %.1f, %.1f, %.1f\n" +
+                            "Room Scale: %.2f"
+                        ).format(
+                        currentProbeX,
+                        currentProbeY,
+                        if (roomLoaded) "LOADED" else "NONE",
+                        currentEnvironmentProbeX,
+                        currentEnvironmentProbeY,
+                        currentEnvironmentProbeZ,
+                        currentEnvironmentProbeScale
+                    )
                     
                     if (appCandidates.isEmpty()) {
                         appListText.text = "No apps discovered. Press REFRESH."
@@ -441,15 +606,15 @@ class CinemaManager(private val session: Session) {
 
                 activeEnvironmentModelEntity?.dispose()
                 activeEnvironmentModelEntity = GltfModelEntity.create(session, model, getEnvironmentProbePose()).also { entity ->
-                    entity.setScale(ENVIRONMENT_PROBE_SCALE)
                     entity.setAlpha(1.0f)
                     entity.setEnabled(true)
                 }
 
+                applyEnvironmentProbeTransform()
                 activeContentStatus = "ENV_MODEL_SUCCESS"
                 Log.i(
                     TAG,
-                    "LOUD: cinema room probe created at ${getEnvironmentProbePose()} scale: $ENVIRONMENT_PROBE_SCALE"
+                    "LOUD: cinema room probe created at ${getEnvironmentProbePose()} scale: $currentEnvironmentProbeScale"
                 )
             } catch (e: Exception) {
                 activeContentStatus = "ENV_MODEL_FAIL: ${e.message}"
